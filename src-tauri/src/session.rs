@@ -59,12 +59,30 @@ pub fn start_midi_listener(
 
     thread::spawn(move || {
         loop {
-            let result = try_connect_midi(session_for_midi.clone());
-            match result {
-                Ok(_conn) => {
+            match try_connect_midi(session_for_midi.clone()) {
+                Ok(conn) => {
+                    // Poll every 3s to detect if the device was unplugged / turned off
                     loop {
-                        thread::sleep(Duration::from_secs(3600));
+                        thread::sleep(Duration::from_secs(3));
+                        let port_name = {
+                            let s = session_for_midi.lock().unwrap();
+                            s.midi_port_name.clone()
+                        };
+                        let still_connected = port_name.map_or(false, |name| {
+                            MidiInput::new("piano-tracker-probe")
+                                .map(|mi| mi.ports().iter().any(|p| mi.port_name(p).ok().as_deref() == Some(&name)))
+                                .unwrap_or(false)
+                        });
+                        if !still_connected {
+                            let mut s = session_for_midi.lock().unwrap();
+                            s.midi_connected = false;
+                            s.midi_port_name = None;
+                            // leave last_midi_instant so the debounce thread can still end any active session
+                            break;
+                        }
                     }
+                    drop(conn);
+                    thread::sleep(Duration::from_secs(3));
                 }
                 Err(_) => {
                     {
@@ -171,12 +189,21 @@ fn try_connect_midi(session: SharedSession) -> Result<midir::MidiInputConnection
         let mut s = session.lock().unwrap();
         s.midi_connected = true;
         s.midi_port_name = Some(port_name);
+        s.last_midi_instant = None; // clear stale state so reconnect doesn't immediately look like playing
     }
 
     let session_cb = session.clone();
-    let conn = midi_in.connect(port, "piano-tracker-input", move |_ts, _msg, _| {
-        let mut s = session_cb.lock().unwrap();
-        s.last_midi_instant = Some(Instant::now());
+    let conn = midi_in.connect(port, "piano-tracker-input", move |_ts, msg, _| {
+        if msg.is_empty() { return; }
+        let status = msg[0];
+        // Only count note-on (0x90–0x9F) with velocity > 0.
+        // Filters out: Active Sensing (0xFE), MIDI Clock (0xF8),
+        // Note-off (0x80–0x8F), Program Change, Control Change, etc.
+        let is_note_on = (status & 0xF0) == 0x90 && msg.len() >= 3 && msg[2] > 0;
+        if is_note_on {
+            let mut s = session_cb.lock().unwrap();
+            s.last_midi_instant = Some(Instant::now());
+        }
     }, ())?;
 
     Ok(conn)
