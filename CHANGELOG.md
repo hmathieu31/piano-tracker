@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.0...piano-tracker-v0.3.1) (2026-03-20)
+
+
+### Bug Fixes
+
+* remove WebView2Loader.dll bundle resource for MSVC CI compatibility ([af36448](https://github.com/hmathieu31/piano-tracker/commit/af3644893efa29c671c3c98ede702365f3b09f61))
+
 ## [0.3.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.2.0...piano-tracker-v0.3.0) (2026-03-20)
 
 
