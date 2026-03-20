@@ -27,14 +27,14 @@ export default function UpdateBanner() {
   }
 
   if (state.phase !== 'available') return null;
-  const { info } = state;
+  const { update } = state;
   return (
     <div className="fixed top-0 left-0 right-0 z-50 bg-sky-600 text-white px-4 py-2.5 flex items-center justify-between gap-4">
       <div className="flex items-center gap-3 min-w-0">
-        <span className="shrink-0 text-sm font-medium">🆕 Piano Tracker v{info.version} is available</span>
-        {info.notes && (
+        <span className="shrink-0 text-sm font-medium">🆕 Piano Tracker v{update.version} is available</span>
+        {update.body && (
           <span className="text-xs text-white/60 truncate hidden md:block">
-            {info.notes.split('\n').find((l: string) => l.trim()) ?? ''}
+            {update.body.split('\n').find((l: string) => l.trim()) ?? ''}
           </span>
         )}
       </div>

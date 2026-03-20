@@ -94,7 +94,6 @@ export default function Settings() {
   const [streakAlert, setStreakAlert] = useState(true);
   const [weeklySummary, setWeeklySummary] = useState(true);
   const [debounceSeconds, setDebounceSeconds] = useState(10);
-  const [githubToken, setGithubToken] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -114,8 +113,6 @@ export default function Settings() {
         if (ws !== null) setWeeklySummary(ws !== 'false');
         const db = await invoke<string | null>('get_setting', { key: 'debounce_seconds' });
         if (db !== null) setDebounceSeconds(Number(db));
-        const gt = await invoke<string | null>('get_setting', { key: 'github_token' });
-        if (gt !== null) setGithubToken(gt);
       } catch {}
     };
     load();
@@ -130,7 +127,6 @@ export default function Settings() {
       await invoke('set_setting', { key: 'streak_alert', value: streakAlert.toString() });
       await invoke('set_setting', { key: 'weekly_summary', value: weeklySummary.toString() });
       await invoke('set_setting', { key: 'debounce_seconds', value: debounceSeconds.toString() });
-      if (githubToken) await invoke('set_setting', { key: 'github_token', value: githubToken });
       await refreshGoals();
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -203,18 +199,9 @@ export default function Settings() {
         <Row label="Version" description="Currently installed">
           <span className="text-sm text-slate-400 tabular-nums">{version ? `v${version}` : '—'}</span>
         </Row>
-        <Row label="GitHub Token" description="Fine-grained PAT with Contents: Read to check for updates (private repo)">
-          <input
-            type="password"
-            value={githubToken}
-            onChange={e => setGithubToken(e.target.value)}
-            placeholder="github_pat_…"
-            className="w-52 px-3 py-1.5 text-xs bg-[#0f0f13] border border-white/10 rounded-lg text-slate-300 placeholder-slate-600 focus:outline-none focus:border-sky-500/50"
-          />
-        </Row>
         <Row label="Updates" description={
           updaterState.phase === 'available'
-            ? `✅ v${updaterState.info.version} is available`
+            ? `✅ v${updaterState.update.version} is available`
             : updaterState.phase === 'checking'
             ? 'Checking…'
             : updaterState.phase === 'up-to-date'

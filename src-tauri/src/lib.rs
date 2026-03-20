@@ -117,7 +117,6 @@ pub fn run() {
             commands::update_session_note,
             commands::get_setting,
             commands::set_setting,
-            commands::fetch_update_manifest,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
