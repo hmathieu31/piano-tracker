@@ -28,6 +28,10 @@ jobs:
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
     runs-on: windows-latest
 
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,15 +43,20 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
       - name: Setup Rust (MSVC)
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable-x86_64-pc-windows-msvc
 
-      - name: Cache Rust build
+      - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2
         with:
           workdir: src-tauri
+          shared-key: "release-windows-msvc"
+          cache-on-failure: true
 
       - name: Install frontend dependencies
         run: npm ci
