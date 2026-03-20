@@ -64,3 +64,54 @@ pub fn get_setting(db: State<DbState>, key: String) -> Result<Option<String>, St
 pub fn set_setting(db: State<DbState>, key: String, value: String) -> Result<(), String> {
     db.set_setting(&key, &value).map_err(|e| e.to_string())
 }
+
+/// Fetches the latest.json from a GitHub private release asset using the stored PAT.
+/// Returns the raw JSON string so the JS updater can consume it directly.
+#[tauri::command]
+pub async fn fetch_update_manifest(db: State<'_, DbState>) -> Result<String, String> {
+    let token = db.get_setting("github_token")
+        .map_err(|e| e.to_string())?
+        .unwrap_or_default();
+
+    if token.is_empty() {
+        return Err("No GitHub token configured. Add one in Settings > App.".into());
+    }
+
+    // 1. Get latest release metadata from GitHub API
+    let client = reqwest::Client::new();
+    let release: serde_json::Value = client
+        .get("https://api.github.com/repos/hmathieu31/piano-tracker/releases/latest")
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "piano-tracker-updater")
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?
+        .json()
+        .await
+        .map_err(|e| format!("Parse error: {}", e))?;
+
+    // 2. Find the latest.json asset
+    let assets = release["assets"].as_array()
+        .ok_or("No assets in release")?;
+    let asset = assets.iter()
+        .find(|a| a["name"].as_str() == Some("latest.json"))
+        .ok_or("latest.json not found in release assets")?;
+    let asset_id = asset["id"].as_u64()
+        .ok_or("Asset has no id")?;
+
+    // 3. Download latest.json content (must use assets API with octet-stream)
+    let manifest = client
+        .get(format!("https://api.github.com/repos/hmathieu31/piano-tracker/releases/assets/{}", asset_id))
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Accept", "application/octet-stream")
+        .header("User-Agent", "piano-tracker-updater")
+        .send()
+        .await
+        .map_err(|e| format!("Download error: {}", e))?
+        .text()
+        .await
+        .map_err(|e| format!("Read error: {}", e))?;
+
+    Ok(manifest)
+}
