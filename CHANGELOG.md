@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.1...piano-tracker-v0.3.2) (2026-03-20)
+
+
+### Bug Fixes
+
+* tray icon missing and right-click menu not working ([7458d80](https://github.com/hmathieu31/piano-tracker/commit/7458d8088c2d567eeebeeaebae53109874c63066))
+
 ## [0.3.1](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.0...piano-tracker-v0.3.1) (2026-03-20)
 
 
