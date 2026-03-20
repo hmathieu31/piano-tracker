@@ -6,7 +6,7 @@ mod notifications;
 use std::sync::Arc;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
-    tray::{TrayIconBuilder, TrayIconEvent},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Listener,
     Manager,
 };
@@ -52,6 +52,7 @@ pub fn run() {
 
             let tray = TrayIconBuilder::new()
                 .menu(&menu)
+                .icon(app.default_window_icon().unwrap().clone())
                 .tooltip("Piano Tracker — Not playing")
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "open" => {
@@ -66,7 +67,12 @@ pub fn run() {
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click { .. } = event {
+                    // Only toggle window on left-click; right-click is reserved for the context menu
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
                             if window.is_visible().unwrap_or(false) {
