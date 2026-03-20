@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.2.0...piano-tracker-v0.3.0) (2026-03-20)
+
+
+### Features
+
+* in-app updater + fix CI release trigger ([e587ee2](https://github.com/hmathieu31/piano-tracker/commit/e587ee2608908a8e5dfbfbfef6582827526ff042))
+
 ## [0.2.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.1.0...piano-tracker-v0.2.0) (2026-03-20)
 
 
