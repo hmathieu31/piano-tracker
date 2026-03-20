@@ -1,5 +1,8 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useSessionStatus } from '../hooks/useData';
+import UpdateBanner from './UpdateBanner';
+import { getVersion } from '@tauri-apps/api/app';
+import { useState, useEffect } from 'react';
 
 const navItems = [
   { to: '/', icon: '🏠', label: 'Today' },
@@ -13,9 +16,12 @@ const navItems = [
 
 export default function Layout() {
   const status = useSessionStatus();
+  const [version, setVersion] = useState('');
+  useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
 
   return (
     <div className="flex h-screen bg-[#0f0f13] text-slate-100 overflow-hidden">
+      <UpdateBanner />
       <aside className="w-52 flex-shrink-0 bg-[#16161d] border-r border-white/5 flex flex-col">
         {/* Logo */}
         <div className="p-5 pb-4">
@@ -83,7 +89,7 @@ export default function Layout() {
             <span className="text-base">⚙️</span>
             Settings
           </NavLink>
-          <div className="px-3 pt-2 text-[10px] text-slate-700">v0.1.0</div>
+          <div className="px-3 pt-2 text-[10px] text-slate-700">{version ? `v${version}` : ''}</div>
         </div>
       </aside>
 

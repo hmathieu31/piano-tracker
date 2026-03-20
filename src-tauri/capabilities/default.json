@@ -12,6 +12,8 @@
     "core:menu:default",
     "core:tray:default",
     "opener:default",
-    "notification:default"
+    "notification:default",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

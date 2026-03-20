@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { useGoalsStatus } from '../hooks/useData';
+import { useUpdater } from '../hooks/useUpdater';
 
 function Section({ title, description, children }: {
   title: string; description?: string; children: React.ReactNode;
@@ -81,6 +83,10 @@ function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: bool
 
 export default function Settings() {
   const { data: goalsData, refresh: refreshGoals } = useGoalsStatus();
+  const { state: updaterState, checkForUpdates } = useUpdater();
+
+  const [version, setVersion] = useState('');
+  useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
 
   const [daily, setDaily] = useState<number | null>(null);
   const [reminderEnabled, setReminderEnabled] = useState(true);
@@ -186,6 +192,27 @@ export default function Settings() {
               {debounceSeconds}s
             </span>
           </div>
+        </Row>
+      </Section>
+
+      <Section title="App" description="Version and updates">
+        <Row label="Version" description="Currently installed">
+          <span className="text-sm text-slate-400 tabular-nums">{version ? `v${version}` : '—'}</span>
+        </Row>
+        <Row label="Updates" description={
+          updaterState.phase === 'available'
+            ? `v${updaterState.update.version} is available`
+            : updaterState.phase === 'checking'
+            ? 'Checking…'
+            : 'You\'re up to date'
+        }>
+          <button
+            onClick={checkForUpdates}
+            disabled={updaterState.phase === 'checking' || updaterState.phase === 'downloading'}
+            className="px-4 py-1.5 text-xs font-medium rounded-lg border border-white/10 text-slate-300 hover:text-white hover:border-white/20 disabled:opacity-40 transition-colors"
+          >
+            {updaterState.phase === 'checking' ? 'Checking…' : 'Check for updates'}
+          </button>
         </Row>
       </Section>
 
