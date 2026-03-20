@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.3...piano-tracker-v0.3.4) (2026-03-20)
+
+
+### Bug Fixes
+
+* updater works with private GitHub repo ([3bdcc57](https://github.com/hmathieu31/piano-tracker/commit/3bdcc573097d65dfa90372afdd695758c4f5b39f))
+
 ## [0.3.3](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.2...piano-tracker-v0.3.3) (2026-03-20)
 
 
