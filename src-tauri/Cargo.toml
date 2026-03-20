@@ -1,6 +1,6 @@
 [package]
 name = "piano-tracker"
-version = "0.3.2"
+version = "0.3.3"
 description = "Piano Practice Tracker"
 authors = ["you"]
 edition = "2021"
