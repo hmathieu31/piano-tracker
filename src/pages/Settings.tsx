@@ -201,13 +201,17 @@ export default function Settings() {
         </Row>
         <Row label="Updates" description={
           updaterState.phase === 'available'
-            ? `v${updaterState.update.version} is available`
+            ? `✅ v${updaterState.update.version} is available`
             : updaterState.phase === 'checking'
             ? 'Checking…'
-            : 'You\'re up to date'
+            : updaterState.phase === 'up-to-date'
+            ? '✓ You\'re up to date'
+            : updaterState.phase === 'error'
+            ? `⚠️ ${updaterState.message}`
+            : 'Check for the latest version'
         }>
           <button
-            onClick={checkForUpdates}
+            onClick={() => checkForUpdates(false)}
             disabled={updaterState.phase === 'checking' || updaterState.phase === 'downloading'}
             className="px-4 py-1.5 text-xs font-medium rounded-lg border border-white/10 text-slate-300 hover:text-white hover:border-white/20 disabled:opacity-40 transition-colors"
           >

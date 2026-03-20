@@ -3,7 +3,7 @@ import { useUpdater } from '../hooks/useUpdater';
 export default function UpdateBanner() {
   const { state, installUpdate, dismiss } = useUpdater();
 
-  if (state.phase === 'idle' || state.phase === 'checking') return null;
+  if (state.phase === 'idle' || state.phase === 'checking' || state.phase === 'up-to-date') return null;
 
   if (state.phase === 'error') {
     return (
@@ -30,6 +30,7 @@ export default function UpdateBanner() {
   }
 
   // phase === 'available'
+  if (state.phase !== 'available') return null;
   const { update } = state;
   return (
     <div className="fixed top-0 left-0 right-0 z-50 bg-sky-600 text-white px-4 py-2.5 flex items-center justify-between gap-4">
@@ -37,7 +38,7 @@ export default function UpdateBanner() {
         <span className="shrink-0 text-sm font-medium">🆕 Piano Tracker {update.version} is available</span>
         {update.body && (
           <span className="text-xs text-white/60 truncate hidden md:block">
-            {update.body.split('\n').find(l => l.trim()) ?? ''}
+            {update.body.split('\n').find((l: string) => l.trim()) ?? ''}
           </span>
         )}
       </div>

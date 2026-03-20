@@ -5,6 +5,7 @@ import { relaunch } from '@tauri-apps/plugin-process';
 export type UpdaterState =
   | { phase: 'idle' }
   | { phase: 'checking' }
+  | { phase: 'up-to-date' }
   | { phase: 'available'; update: Update }
   | { phase: 'downloading'; progress: number }
   | { phase: 'error'; message: string };
@@ -12,15 +13,24 @@ export type UpdaterState =
 export function useUpdater() {
   const [state, setState] = useState<UpdaterState>({ phase: 'idle' });
 
-  const checkForUpdates = useCallback(async () => {
+  // silent=true for the background auto-check (don't surface errors or "up to date")
+  // silent=false for manual "Check for updates" button
+  const checkForUpdates = useCallback(async (silent = false) => {
     setState({ phase: 'checking' });
     try {
       const update = await check();
-      setState(update ? { phase: 'available', update } : { phase: 'idle' });
+      if (update) {
+        setState({ phase: 'available', update });
+      } else {
+        setState(silent ? { phase: 'idle' } : { phase: 'up-to-date' });
+      }
     } catch (e) {
-      // In dev mode the endpoint won't exist — fail silently
-      setState({ phase: 'idle' });
-      console.debug('Update check skipped:', e);
+      if (silent) {
+        setState({ phase: 'idle' });
+        console.debug('Background update check failed:', e);
+      } else {
+        setState({ phase: 'error', message: String(e) });
+      }
     }
   }, []);
 
@@ -50,9 +60,9 @@ export function useUpdater() {
 
   const dismiss = useCallback(() => setState({ phase: 'idle' }), []);
 
-  // Auto-check 5s after app starts
+  // Background auto-check 5s after app starts — silent
   useEffect(() => {
-    const t = setTimeout(checkForUpdates, 5000);
+    const t = setTimeout(() => checkForUpdates(true), 5000);
     return () => clearTimeout(t);
   }, []);
 
