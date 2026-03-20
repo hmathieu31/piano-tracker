@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.2...piano-tracker-v0.3.3) (2026-03-20)
+
+
+### Bug Fixes
+
+* updater check visibility and CI latest.json generation ([0c1db01](https://github.com/hmathieu31/piano-tracker/commit/0c1db01937c86c3d5480a1eb1b2006058c65f96c))
+
 ## [0.3.2](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.1...piano-tracker-v0.3.2) (2026-03-20)
 
 
