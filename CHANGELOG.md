@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.2.0...piano-tracker-v1.2.1) (2026-03-21)
+
+
+### Bug Fixes
+
+* responsive layout + iTunes search API ([7cc2fdf](https://github.com/hmathieu31/piano-tracker/commit/7cc2fdf7ae7a966b8d0ac38e80b566a939767630))
+
 ## [1.2.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.1.0...piano-tracker-v1.2.0) (2026-03-21)
 
 
