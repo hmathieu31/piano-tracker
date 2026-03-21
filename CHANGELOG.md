@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.4.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.3.1...piano-tracker-v1.4.0) (2026-03-21)
+
+
+### Features
+
+* Cozy Cloud upload + song name in MIDI filename ([4ecf290](https://github.com/hmathieu31/piano-tracker/commit/4ecf2907922819d9ad35fb3a1f82546e0c974103))
+* open Spotify link directly in desktop app via spotify: URI scheme ([04b9cc7](https://github.com/hmathieu31/piano-tracker/commit/04b9cc709c8f84d6deff3d4da73093b4a7cde839))
+* Repertoire kanban+collection, dev seed data, Ivory branding ([849e2e7](https://github.com/hmathieu31/piano-tracker/commit/849e2e73d69928c654e494aae0e098656e110bdc))
+* Windows toast notification when session ends while app is backgrounded ([adaafdd](https://github.com/hmathieu31/piano-tracker/commit/adaafddccced14e226a0b38a5ed26656e9324b75))
+
+
+### Bug Fixes
+
+* fix MIDI timing — accurate relative_ms from first note ([fa1e062](https://github.com/hmathieu31/piano-tracker/commit/fa1e0627cc4ea3b063c48b2b8deb6519a472d62c))
+* normalize note-off velocity to 0 to prevent phantom note-ons ([ac2bc21](https://github.com/hmathieu31/piano-tracker/commit/ac2bc21e2e1dde523a9c0bd9199d5b126a90edc1))
+
 ## [1.3.1](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.3.0...piano-tracker-v1.3.1) (2026-03-21)
 
 
