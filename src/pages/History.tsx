@@ -12,6 +12,7 @@ import { SessionRecord, SongRecord } from '../types';
 import { formatDurationLong, formatTime, formatDate } from '../utils';
 import PianoRoll from '../components/PianoRoll';
 import SongSearchModal from '../components/SongSearchModal';
+import FeelingPicker from '../components/FeelingPicker';
 
 // ── Session Detail Panel ─────────────────────────────────────────────────────
 
@@ -169,6 +170,16 @@ function SessionDetailPanel({
               ) : (
                 <PianoRoll events={events} durationMs={durationMs} />
               )}
+            </div>
+
+            {/* How did it feel? */}
+            <div>
+              <p className="text-xs font-medium text-foreground-400 uppercase tracking-wide mb-2">How did it feel?</p>
+              <FeelingPicker
+                sessionId={session.id}
+                value={session.feeling}
+                onChange={onUpdate}
+              />
             </div>
 
             {/* Practice Note */}

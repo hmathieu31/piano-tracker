@@ -9,13 +9,11 @@ import { onAction } from '@tauri-apps/plugin-notification';
 import { useState, useEffect, useCallback } from 'react';
 
 const navItems = [
-  { to: '/', icon: '🏠', label: 'Today' },
-  { to: '/goals', icon: '🎯', label: 'Goals' },
-  { to: '/charts', icon: '📊', label: 'Charts' },
-  { to: '/heatmap', icon: '🗓️', label: 'Heatmap' },
-  { to: '/insights', icon: '💡', label: 'Insights' },
-  { to: '/achievements', icon: '🏆', label: 'Achievements' },
-  { to: '/history', icon: '📋', label: 'History' },
+  { to: '/',            icon: '🏠', label: 'Dashboard' },
+  { to: '/library',     icon: '📚', label: 'Library' },
+  { to: '/history',     icon: '📋', label: 'History' },
+  { to: '/stats',       icon: '📊', label: 'Stats' },
+  { to: '/achievements',icon: '🏆', label: 'Achievements' },
 ];
 
 export default function Layout() {

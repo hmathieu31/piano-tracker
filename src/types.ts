@@ -14,6 +14,14 @@ export interface SongRecord {
   total_seconds?: number;
   session_count?: number;
   last_played_date?: string | null;
+  // learning journey
+  avg_feeling?: number | null;
+  status?: string | null;
+}
+
+export interface SongDetail {
+  song: SongRecord;
+  sessions: SessionRecord[];
 }
 
 export interface MidiEventRecord {
@@ -34,6 +42,7 @@ export interface SessionRecord {
   note: string | null;
   song_id: number | null;
   song_name: string | null;
+  feeling: number | null;
   song: SongRecord | null;
 }
 

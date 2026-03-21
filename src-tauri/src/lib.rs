@@ -136,6 +136,11 @@ pub fn run() {
             commands::get_midi_events,
             commands::export_midi_file,
             commands::save_midi_file,
+            // Learning journey
+            commands::set_session_feeling,
+            commands::set_song_status,
+            commands::get_all_songs_with_stats,
+            commands::get_song_with_sessions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

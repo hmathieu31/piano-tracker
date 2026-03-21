@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { SessionRecord, DailyTotal, StreakInfo, InsightsData, GoalsStatus, AchievementInfo, SessionStatus } from '../types';
+import type { SessionRecord, DailyTotal, StreakInfo, InsightsData, GoalsStatus, AchievementInfo, SessionStatus, SongRecord, SongDetail } from '../types';
 
 export function useSessionStatus() {
   const [status, setStatus] = useState<SessionStatus>({
@@ -152,4 +152,43 @@ export function useSessions(limit: number = 100) {
   }, [refresh]);
 
   return { data, refresh };
+}
+
+export function useSongsWithStats() {
+  const [data, setData] = useState<SongRecord[]>([]);
+
+  const refresh = useCallback(async () => {
+    try {
+      const s = await invoke<SongRecord[]>('get_all_songs_with_stats');
+      setData(s);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    let unlisten: (() => void) | undefined;
+    listen('session-ended', () => refresh()).then(fn => { unlisten = fn; });
+    return () => { unlisten?.(); };
+  }, [refresh]);
+
+  return { data, refresh };
+}
+
+export function useSongDetail(songId: number | null) {
+  const [data, setData] = useState<SongDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (songId == null) { setData(null); return; }
+    setLoading(true);
+    try {
+      const d = await invoke<SongDetail | null>('get_song_with_sessions', { songId });
+      setData(d);
+    } catch {}
+    finally { setLoading(false); }
+  }, [songId]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  return { data, loading, refresh };
 }

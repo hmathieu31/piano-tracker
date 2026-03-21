@@ -19,6 +19,15 @@ pub struct SongRecord {
     pub total_seconds: Option<i64>,
     pub session_count: Option<i32>,
     pub last_played_date: Option<String>,
+    // Learning journey fields
+    pub avg_feeling: Option<f64>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SongDetail {
+    pub song: SongRecord,
+    pub sessions: Vec<SessionRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,6 +48,7 @@ pub struct SessionRecord {
     pub note: Option<String>,
     pub song_id: Option<i64>,
     pub song_name: Option<String>,
+    pub feeling: Option<i64>,
     pub song: Option<SongRecord>,
 }
 
@@ -159,6 +169,8 @@ impl Database {
         // Migrate existing sessions table to add song columns if not present
         let _ = conn.execute("ALTER TABLE sessions ADD COLUMN song_id INTEGER REFERENCES songs(id)", []);
         let _ = conn.execute("ALTER TABLE sessions ADD COLUMN song_name TEXT", []);
+        let _ = conn.execute("ALTER TABLE sessions ADD COLUMN feeling INTEGER", []);
+        let _ = conn.execute("ALTER TABLE songs ADD COLUMN status TEXT DEFAULT 'learning'", []);
         Ok(())
     }
 
@@ -180,22 +192,24 @@ impl Database {
     fn row_to_session(row: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
         let song_id: Option<i64> = row.get(6)?;
         let song = if let Some(id) = song_id {
-            let sg_title: Option<String> = row.get(9)?;
+            let sg_title: Option<String> = row.get(10)?;
             sg_title.map(|title| SongRecord {
                 id,
                 title,
-                artist: row.get(10).ok().flatten(),
-                genre: row.get(11).ok().flatten(),
-                album: row.get(12).ok().flatten(),
-                year: row.get(13).ok().flatten(),
-                cover_url: row.get(14).ok().flatten(),
-                spotify_url: row.get(15).ok().flatten(),
-                musicbrainz_recording_id: row.get(16).ok().flatten(),
-                musicbrainz_release_id: row.get(17).ok().flatten(),
-                created_at: row.get(18).unwrap_or(0),
+                artist: row.get(11).ok().flatten(),
+                genre: row.get(12).ok().flatten(),
+                album: row.get(13).ok().flatten(),
+                year: row.get(14).ok().flatten(),
+                cover_url: row.get(15).ok().flatten(),
+                spotify_url: row.get(16).ok().flatten(),
+                musicbrainz_recording_id: row.get(17).ok().flatten(),
+                musicbrainz_release_id: row.get(18).ok().flatten(),
+                created_at: row.get(19).unwrap_or(0),
                 total_seconds: None,
                 session_count: None,
                 last_played_date: None,
+                avg_feeling: None,
+                status: row.get(20).ok().flatten(),
             })
         } else {
             None
@@ -209,6 +223,7 @@ impl Database {
             note: row.get(5)?,
             song_id: row.get(6)?,
             song_name: row.get(7)?,
+            feeling: row.get(8)?,
             song,
         })
     }
@@ -217,10 +232,10 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT s.id, s.date, s.start_ts, s.end_ts, s.duration_seconds, s.note,
-                    s.song_id, s.song_name,
+                    s.song_id, s.song_name, s.feeling,
                     sg.id, sg.title, sg.artist, sg.genre, sg.album, sg.year,
                     sg.cover_url, sg.spotify_url, sg.musicbrainz_recording_id,
-                    sg.musicbrainz_release_id, sg.created_at
+                    sg.musicbrainz_release_id, sg.created_at, sg.status
              FROM sessions s
              LEFT JOIN songs sg ON s.song_id = sg.id
              ORDER BY s.start_ts DESC LIMIT ?1"
@@ -233,10 +248,10 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT s.id, s.date, s.start_ts, s.end_ts, s.duration_seconds, s.note,
-                    s.song_id, s.song_name,
+                    s.song_id, s.song_name, s.feeling,
                     sg.id, sg.title, sg.artist, sg.genre, sg.album, sg.year,
                     sg.cover_url, sg.spotify_url, sg.musicbrainz_recording_id,
-                    sg.musicbrainz_release_id, sg.created_at
+                    sg.musicbrainz_release_id, sg.created_at, sg.status
              FROM sessions s
              LEFT JOIN songs sg ON s.song_id = sg.id
              WHERE s.song_id = ?1
@@ -645,6 +660,8 @@ impl Database {
             total_seconds: row.get(11).ok(),
             session_count: row.get(12).ok(),
             last_played_date: row.get(13).ok().flatten(),
+            avg_feeling: row.get(14).ok().flatten(),
+            status: row.get(15).ok().flatten(),
         })
     }
 
@@ -653,7 +670,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, title, artist, genre, album, year, cover_url, spotify_url,
                     musicbrainz_recording_id, musicbrainz_release_id, created_at,
-                    NULL, NULL, NULL
+                    NULL, NULL, NULL, NULL, status
              FROM songs ORDER BY title ASC"
         )?;
         let rows = stmt.query_map([], Self::row_to_song_stats)?;
@@ -668,7 +685,9 @@ impl Database {
                     sg.musicbrainz_recording_id, sg.musicbrainz_release_id, sg.created_at,
                     COALESCE(SUM(s.duration_seconds), 0) as total_seconds,
                     COUNT(s.id) as session_count,
-                    MAX(s.date) as last_played_date
+                    MAX(s.date) as last_played_date,
+                    AVG(s.feeling) as avg_feeling,
+                    sg.status
              FROM songs sg
              LEFT JOIN sessions s ON s.song_id = sg.id
              GROUP BY sg.id
@@ -686,7 +705,9 @@ impl Database {
                     sg.musicbrainz_recording_id, sg.musicbrainz_release_id, sg.created_at,
                     COALESCE(SUM(s.duration_seconds), 0) as total_seconds,
                     COUNT(s.id) as session_count,
-                    MAX(s.date) as last_played_date
+                    MAX(s.date) as last_played_date,
+                    AVG(s.feeling) as avg_feeling,
+                    sg.status
              FROM songs sg
              INNER JOIN sessions s ON s.song_id = sg.id
              GROUP BY sg.id
@@ -712,6 +733,51 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         conn.execute("UPDATE sessions SET song_id = NULL WHERE id = ?1", params![session_id])?;
         Ok(())
+    }
+
+    pub fn set_session_feeling(&self, session_id: i64, feeling: Option<i64>) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE sessions SET feeling = ?1 WHERE id = ?2", params![feeling, session_id])?;
+        Ok(())
+    }
+
+    pub fn set_song_status(&self, song_id: i64, status: &str) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE songs SET status = ?1 WHERE id = ?2", params![status, song_id])?;
+        Ok(())
+    }
+
+    pub fn get_all_songs_with_stats(&self) -> Result<Vec<SongRecord>, rusqlite::Error> {
+        self.get_song_stats()
+    }
+
+    pub fn get_song_with_sessions(&self, song_id: i64) -> Result<Option<SongDetail>, rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        let song = conn.query_row(
+            "SELECT sg.id, sg.title, sg.artist, sg.genre, sg.album, sg.year,
+                    sg.cover_url, sg.spotify_url,
+                    sg.musicbrainz_recording_id, sg.musicbrainz_release_id, sg.created_at,
+                    COALESCE(SUM(s.duration_seconds), 0),
+                    COUNT(s.id),
+                    MAX(s.date),
+                    AVG(s.feeling),
+                    sg.status
+             FROM songs sg
+             LEFT JOIN sessions s ON s.song_id = sg.id
+             WHERE sg.id = ?1
+             GROUP BY sg.id",
+            params![song_id],
+            Self::row_to_song_stats,
+        );
+        match song {
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+            Err(e) => return Err(e),
+            Ok(song) => {
+                drop(conn);
+                let sessions = self.get_sessions_for_song(song_id)?;
+                Ok(Some(SongDetail { song, sessions }))
+            }
+        }
     }
 
     // ── MIDI events ──────────────────────────────────────────────────────────

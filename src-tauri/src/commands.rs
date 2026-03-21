@@ -2,7 +2,7 @@ use tauri::State;
 use tauri::Manager;
 use std::sync::Arc;
 use crate::db::{Database, SessionRecord, DailyTotal, GoalsConfig, StreakInfo, InsightsData,
-                GoalsStatus, AchievementInfo, SongRecord, MidiEventRecord};
+                GoalsStatus, AchievementInfo, SongRecord, SongDetail, MidiEventRecord};
 use crate::session::{SharedSession, SessionStatus, get_status};
 
 pub type DbState = Arc<Database>;
@@ -70,6 +70,28 @@ pub fn set_setting(db: State<DbState>, key: String, value: String) -> Result<(),
 #[tauri::command]
 pub fn reconnect_midi(force_reconnect: State<crate::session::ForceReconnect>) {
     force_reconnect.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+// ── Learning journey commands ─────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn set_session_feeling(db: State<DbState>, session_id: i64, feeling: Option<i64>) -> Result<(), String> {
+    db.set_session_feeling(session_id, feeling).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_song_status(db: State<DbState>, song_id: i64, status: String) -> Result<(), String> {
+    db.set_song_status(song_id, &status).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_all_songs_with_stats(db: State<DbState>) -> Result<Vec<SongRecord>, String> {
+    db.get_all_songs_with_stats().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_song_with_sessions(db: State<DbState>, song_id: i64) -> Result<Option<SongDetail>, String> {
+    db.get_song_with_sessions(song_id).map_err(|e| e.to_string())
 }
 
 // ── Song management commands ─────────────────────────────────────────────────
