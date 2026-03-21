@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.6...piano-tracker-v0.4.0) (2026-03-21)
+
+
+### Features
+
+* manual MIDI reconnect button in sidebar ([783ed91](https://github.com/hmathieu31/piano-tracker/commit/783ed919b1058633bd09a0e202e9f66bc8b089a8))
+
 ## [0.3.6](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.5...piano-tracker-v0.3.6) (2026-03-21)
 
 
