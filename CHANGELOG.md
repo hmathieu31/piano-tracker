@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.1](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.3.0...piano-tracker-v1.3.1) (2026-03-21)
+
+
+### Bug Fixes
+
+* fix MIDI reconnect after keyboard power cycle ([f0f9ee7](https://github.com/hmathieu31/piano-tracker/commit/f0f9ee71b41db293ee6dacf2a2e7f166ab6fed40))
+* fix Spotify link and MIDI export in Tauri webview ([eb539f9](https://github.com/hmathieu31/piano-tracker/commit/eb539f9b51c504c8064ee4ea5bca395f79f02fc9))
+* share updater state via context so banner shows on manual check ([1c4cef3](https://github.com/hmathieu31/piano-tracker/commit/1c4cef3d43dba3b16a5be5c7074b19a490beaf25))
+
 ## [1.3.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.2.1...piano-tracker-v1.3.0) (2026-03-21)
 
 
