@@ -30,6 +30,10 @@ function SessionDetailPanel({
   const [editingNote, setEditingNote] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
   const [exportingMidi, setExportingMidi] = useState(false);
+  const [uploadingCozy, setUploadingCozy] = useState(false);
+  const [cozyResult, setCozyResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const songName = session.song?.title;
 
   const saveNote = async () => {
     setSavingNote(true);
@@ -45,12 +49,33 @@ function SessionDetailPanel({
   const exportMidi = async () => {
     setExportingMidi(true);
     try {
-      const path = await invoke<string>('save_midi_file', { sessionId: session.id, date: session.date });
+      const path = await invoke<string>('save_midi_file', {
+        sessionId: session.id,
+        date: session.date,
+        songName,
+      });
       await revealItemInDir(path);
     } catch (e) {
       console.error('MIDI export failed', e);
     } finally {
       setExportingMidi(false);
+    }
+  };
+
+  const uploadToCozy = async () => {
+    setUploadingCozy(true);
+    setCozyResult(null);
+    try {
+      const url = await invoke<string>('upload_midi_to_cozy', {
+        sessionId: session.id,
+        date: session.date,
+        songName,
+      });
+      setCozyResult({ ok: true, msg: url });
+    } catch (e) {
+      setCozyResult({ ok: false, msg: String(e) });
+    } finally {
+      setUploadingCozy(false);
     }
   };
 
@@ -149,11 +174,31 @@ function SessionDetailPanel({
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-medium text-foreground-400 uppercase tracking-wide">Piano Roll</p>
                 {events.length > 0 && (
-                  <Button size="sm" variant="flat" color="primary" onPress={exportMidi} isLoading={exportingMidi} className="h-7 text-xs">
-                    ⬇ Export .mid
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="flat" color="primary" onPress={exportMidi} isLoading={exportingMidi} className="h-7 text-xs">
+                      ⬇ Export .mid
+                    </Button>
+                    <Button size="sm" variant="flat" color="secondary" onPress={uploadToCozy} isLoading={uploadingCozy} className="h-7 text-xs">
+                      ☁ Cozy Cloud
+                    </Button>
+                  </div>
                 )}
               </div>
+              {cozyResult && (
+                <div className={`mb-2 px-3 py-2 rounded-lg text-xs flex items-center gap-2 ${cozyResult.ok ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+                  {cozyResult.ok ? (
+                    <>
+                      <span>✓ Uploaded!</span>
+                      <button
+                        className="underline opacity-80 hover:opacity-100 truncate max-w-[280px]"
+                        onClick={() => openUrl(cozyResult.msg)}
+                      >{cozyResult.msg}</button>
+                    </>
+                  ) : (
+                    <span>✗ {cozyResult.msg}</span>
+                  )}
+                </div>
+              )}
               {eventsLoading ? (
                 <div className="h-32 flex items-center justify-center"><Spinner color="primary" /></div>
               ) : events.length === 0 ? (
