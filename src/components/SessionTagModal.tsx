@@ -11,6 +11,8 @@ interface Props {
   sessionId: number;
   durationSeconds: number;
   onClose: () => void;
+  /** DEV only: open directly on the suggest step with a pre-filled suggestion */
+  devSuggestion?: MasterySuggestion;
 }
 
 type PracticeType = 'first' | 'section' | 'full' | 'performance';
@@ -41,8 +43,8 @@ const AUTO_DISMISS_SECS = 45;
 
 // ── component ──────────────────────────────────────────────────────────────
 
-export default function SessionTagModal({ sessionId, durationSeconds, onClose }: Props) {
-  const [step, setStep] = useState<Step>('song');
+export default function SessionTagModal({ sessionId, durationSeconds, onClose, devSuggestion }: Props) {
+  const [step, setStep] = useState<Step>(devSuggestion ? 'suggest' : 'song');
   const [selectedSong, setSelectedSong] = useState<SongRecord | null>(null);
   const [practiceType, setPracticeType] = useState<PracticeType | null>(null);
   const [feeling, setFeeling] = useState<number | null>(null);
@@ -54,7 +56,7 @@ export default function SessionTagModal({ sessionId, durationSeconds, onClose }:
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [countdown, setCountdown] = useState(AUTO_DISMISS_SECS);
-  const [suggestion, setSuggestion] = useState<MasterySuggestion | null>(null);
+  const [suggestion, setSuggestion] = useState<MasterySuggestion | null>(devSuggestion ?? null);
   const [celebrating, setCelebrating] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);

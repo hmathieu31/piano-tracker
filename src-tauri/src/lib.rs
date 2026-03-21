@@ -152,6 +152,7 @@ pub fn run() {
             // Dev / demo data
             commands::seed_dev_data,
             commands::clear_dev_data,
+            commands::dev_simulate_session_ended,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

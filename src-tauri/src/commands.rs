@@ -1,5 +1,6 @@
 use tauri::State;
 use tauri::Manager;
+use tauri::Emitter;
 use std::sync::Arc;
 use crate::db::{Database, SessionRecord, DailyTotal, GoalsConfig, StreakInfo, InsightsData,
                 GoalsStatus, AchievementInfo, SongRecord, SongDetail, MidiEventRecord,
@@ -319,4 +320,33 @@ pub fn seed_dev_data(db: State<DbState>) -> Result<bool, String> {
 #[tauri::command]
 pub fn clear_dev_data(db: State<DbState>) -> Result<(), String> {
     db.clear_dev_data().map_err(|e| e.to_string())
+}
+
+/// Insert a fake session and emit `session-ended` so the tagging modal appears.
+#[tauri::command]
+pub fn dev_simulate_session_ended(
+    app: tauri::AppHandle,
+    db: State<DbState>,
+    duration_seconds: i64,
+) -> Result<(), String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use chrono::Local;
+
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+    let start_ms = now_ms - duration_seconds * 1000;
+    let date = Local::now().format("%Y-%m-%d").to_string();
+
+    let session_id = db
+        .insert_session(&date, start_ms, now_ms, duration_seconds)
+        .map_err(|e| e.to_string())?;
+
+    app.emit("session-ended", crate::session::SessionEndedPayload {
+        session_id,
+        duration_seconds,
+    }).map_err(|e: tauri::Error| e.to_string())?;
+
+    Ok(())
 }

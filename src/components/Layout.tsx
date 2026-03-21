@@ -2,12 +2,14 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useSessionStatus } from '../hooks/useData';
 import UpdateBanner from './UpdateBanner';
 import SessionTagModal from './SessionTagModal';
+import DevToolbar from './DevToolbar';
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { onAction } from '@tauri-apps/plugin-notification';
 import { useState, useEffect, useCallback } from 'react';
+import type { MasterySuggestion } from '../types';
 
 type NavSection = {
   label: string;
@@ -45,6 +47,7 @@ export default function Layout() {
   const [reconnecting, setReconnecting] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [pendingSession, setPendingSession] = useState<{ id: number; duration: number } | null>(null);
+  const [devSuggestion, setDevSuggestion] = useState<MasterySuggestion | null>(null);
   useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
 
   // Listen for session-ended and show the tagging modal
@@ -80,6 +83,17 @@ export default function Layout() {
           durationSeconds={pendingSession.duration}
           onClose={() => setPendingSession(null)}
         />
+      )}
+      {devSuggestion && (
+        <SessionTagModal
+          sessionId={-1}
+          durationSeconds={0}
+          devSuggestion={devSuggestion}
+          onClose={() => setDevSuggestion(null)}
+        />
+      )}
+      {import.meta.env.DEV && (
+        <DevToolbar onSimulateSuggest={s => setDevSuggestion(s)} />
       )}
 
       {/* Sidebar */}
