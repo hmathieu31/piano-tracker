@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::thread;
 use midir::MidiInput;
@@ -16,6 +17,7 @@ pub struct SessionInner {
 }
 
 pub type SharedSession = Arc<Mutex<SessionInner>>;
+pub type ForceReconnect = Arc<AtomicBool>;
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SessionStatus {
@@ -53,6 +55,7 @@ pub fn start_midi_listener(
     app_handle: AppHandle,
     db: Arc<Database>,
     session: SharedSession,
+    force_reconnect: ForceReconnect,
 ) {
     let session_for_midi = session.clone();
     let session_for_debounce = session.clone();
@@ -65,12 +68,11 @@ pub fn start_midi_listener(
             // re-registration of an already-known name after a clean drop.
             match try_connect_midi(session_for_midi.clone(), attempt) {
                 Ok((conn, port_name)) => {
-                    // Poll port list every 2s to detect keyboard power-off.
-                    // On Windows/WinMM, USB MIDI ports disappear from the list
-                    // when the device is turned off or unplugged.
+                    // Poll every 2s: detect keyboard power-off OR manual reconnect request
                     loop {
                         thread::sleep(Duration::from_secs(2));
-                        let gone = MidiInput::new("piano-tracker-probe")
+                        let forced = force_reconnect.swap(false, Ordering::Relaxed);
+                        let gone = forced || MidiInput::new("piano-tracker-probe")
                             .map(|mi| mi.ports().iter()
                                 .all(|p| mi.port_name(p).ok().as_deref() != Some(port_name.as_str())))
                             .unwrap_or(true);
@@ -91,7 +93,11 @@ pub fn start_midi_listener(
                         s.midi_connected = false;
                         s.midi_port_name = None;
                     }
-                    thread::sleep(Duration::from_secs(3));
+                    // Wait up to 3s but wake early if a manual reconnect is requested
+                    for _ in 0..6 {
+                        thread::sleep(Duration::from_millis(500));
+                        if force_reconnect.swap(false, Ordering::Relaxed) { break; }
+                    }
                 }
             }
         }

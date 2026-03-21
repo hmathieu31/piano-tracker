@@ -64,3 +64,8 @@ pub fn get_setting(db: State<DbState>, key: String) -> Result<Option<String>, St
 pub fn set_setting(db: State<DbState>, key: String, value: String) -> Result<(), String> {
     db.set_setting(&key, &value).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn reconnect_midi(force_reconnect: State<crate::session::ForceReconnect>) {
+    force_reconnect.store(true, std::sync::atomic::Ordering::Relaxed);
+}

@@ -2857,7 +2857,7 @@ dependencies = [
 
 [[package]]
 name = "piano-tracker"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "chrono",
  "midir",

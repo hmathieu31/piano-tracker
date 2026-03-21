@@ -2,7 +2,8 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useSessionStatus } from '../hooks/useData';
 import UpdateBanner from './UpdateBanner';
 import { getVersion } from '@tauri-apps/api/app';
-import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { useState, useEffect, useCallback } from 'react';
 
 const navItems = [
   { to: '/', icon: '🏠', label: 'Today' },
@@ -17,7 +18,14 @@ const navItems = [
 export default function Layout() {
   const status = useSessionStatus();
   const [version, setVersion] = useState('');
+  const [reconnecting, setReconnecting] = useState(false);
   useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
+
+  const handleReconnect = useCallback(async () => {
+    setReconnecting(true);
+    await invoke('reconnect_midi').catch(() => {});
+    setTimeout(() => setReconnecting(false), 2000);
+  }, []);
 
   return (
     <div className="flex h-screen bg-[#0f0f13] text-slate-100 overflow-hidden">
@@ -41,7 +49,7 @@ export default function Layout() {
               status.is_playing ? 'bg-green-400 pulse-ring' :
               status.midi_connected ? 'bg-sky-400' : 'bg-slate-600'
             }`} />
-            <div className="text-xs truncate">
+            <div className="text-xs truncate flex-1">
               {status.is_playing ? (
                 <span className="text-green-400 font-medium">Playing...</span>
               ) : status.midi_connected ? (
@@ -50,6 +58,21 @@ export default function Layout() {
                 <span className="text-slate-500">No MIDI device</span>
               )}
             </div>
+            <button
+              onClick={handleReconnect}
+              disabled={reconnecting}
+              title="Reconnect MIDI"
+              className="text-slate-600 hover:text-slate-300 disabled:opacity-40 transition-colors flex-shrink-0 ml-auto"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className={`w-3 h-3 ${reconnecting ? 'animate-spin' : ''}`}
+              >
+                <path fillRule="evenodd" d="M13.836 2.477a.75.75 0 0 1 .75.75v3.182a.75.75 0 0 1-.75.75h-3.182a.75.75 0 0 1 0-1.5h1.37l-.84-.841a4.5 4.5 0 0 0-7.08.932.75.75 0 0 1-1.3-.75 6 6 0 0 1 9.44-1.242l.842.84V3.227a.75.75 0 0 1 .75-.75Zm-.911 7.5A.75.75 0 0 1 13.199 11a6 6 0 0 1-9.44 1.241l-.84-.84v1.371a.75.75 0 0 1-1.5 0V9.591a.75.75 0 0 1 .75-.75H5.35a.75.75 0 0 1 0 1.5H3.98l.841.841a4.5 4.5 0 0 0 7.08-.932.75.75 0 0 1 1.024-.273Z" clipRule="evenodd" />
+              </svg>
+            </button>
           </div>
         </div>
 

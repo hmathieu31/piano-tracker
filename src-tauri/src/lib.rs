@@ -10,7 +10,7 @@ use tauri::{
     Listener,
     Manager,
 };
-use session::{SharedSession, SessionInner, start_midi_listener};
+use session::{SharedSession, SessionInner, ForceReconnect, start_midi_listener};
 use commands::DbState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -39,7 +39,10 @@ pub fn run() {
             app.manage(db.clone() as DbState);
             app.manage(session.clone());
 
-            start_midi_listener(app.handle().clone(), db.clone(), session.clone());
+            let force_reconnect: ForceReconnect = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            app.manage(force_reconnect.clone());
+
+            start_midi_listener(app.handle().clone(), db.clone(), session.clone(), force_reconnect);
             notifications::start_notification_scheduler(app.handle().clone(), db.clone());
 
             let open_item = MenuItemBuilder::new("Open Dashboard").id("open").build(app)?;
@@ -117,6 +120,7 @@ pub fn run() {
             commands::update_session_note,
             commands::get_setting,
             commands::set_setting,
+            commands::reconnect_midi,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
