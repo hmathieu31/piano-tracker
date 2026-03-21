@@ -227,6 +227,7 @@ impl Database {
                 last_played_date: None,
                 avg_feeling: None,
                 status: row.get(21).ok().flatten(),
+                difficulty: None,
             })
         } else {
             None
