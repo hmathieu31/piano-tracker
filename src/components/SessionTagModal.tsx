@@ -686,28 +686,28 @@ function AnimatedCheck() {
       <svg viewBox="0 0 64 64" className="w-full h-full" fill="none">
         {/* Track ring */}
         <circle cx="32" cy="32" r="26" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
-        {/* Animated ring */}
+        {/* Animated ring — rotate so it starts at 12 o'clock */}
         <motion.circle
           cx="32" cy="32" r="26"
           stroke="#0ea5e9"
           strokeWidth="3"
           strokeLinecap="round"
-          strokeDasharray="163.4"
-          initial={{ strokeDashoffset: 163.4, rotate: -90 }}
-          animate={{ strokeDashoffset: 0 }}
-          style={{ originX: '32px', originY: '32px', rotate: '-90deg' }}
+          fill="none"
+          transform="rotate(-90 32 32)"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
           transition={{ duration: 0.45, ease: 'easeOut' }}
         />
         {/* Checkmark */}
-        <motion.polyline
-          points="20,33 28,41 44,25"
+        <motion.path
+          d="M20 33 L28 41 L44 25"
           stroke="#0ea5e9"
           strokeWidth="3.5"
           strokeLinecap="round"
           strokeLinejoin="round"
-          strokeDasharray="34"
-          initial={{ strokeDashoffset: 34 }}
-          animate={{ strokeDashoffset: 0 }}
+          fill="none"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
           transition={{ duration: 0.25, ease: 'easeOut', delay: 0.4 }}
         />
       </svg>
