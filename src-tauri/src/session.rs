@@ -69,14 +69,19 @@ pub fn start_midi_listener(
             // re-registration of an already-known name after a clean drop.
             match try_connect_midi(session_for_midi.clone(), attempt) {
                 Ok((conn, port_name)) => {
-                    // Poll every 2s: detect keyboard power-off OR manual reconnect request
+                    // Clear any stale reconnect request that triggered this connection
+                    // attempt. Without this, the first poll iteration sees forced=true
+                    // and immediately disconnects the keyboard we just connected.
+                    force_reconnect.store(false, Ordering::Relaxed);
+
+                    // Poll every 1s: detect keyboard power-off OR manual reconnect request
                     loop {
-                        thread::sleep(Duration::from_secs(2));
+                        thread::sleep(Duration::from_secs(1));
                         let forced = force_reconnect.swap(false, Ordering::Relaxed);
                         let gone = forced || MidiInput::new("piano-tracker-probe")
                             .map(|mi| mi.ports().iter()
                                 .all(|p| mi.port_name(p).ok().as_deref() != Some(port_name.as_str())))
-                            .unwrap_or(true);
+                            .unwrap_or(false); // if probe itself fails, don't falsely assume gone
                         if gone {
                             let mut s = session_for_midi.lock().unwrap();
                             s.midi_connected = false;
@@ -85,8 +90,12 @@ pub fn start_midi_listener(
                         }
                     }
                     drop(conn);
-                    // Give WinMM time to fully release the port before retrying
-                    thread::sleep(Duration::from_secs(2));
+                    // Give WinMM time to release the port — but wake early if user
+                    // manually requests reconnect.
+                    for _ in 0..10 {
+                        thread::sleep(Duration::from_millis(200));
+                        if force_reconnect.load(Ordering::Relaxed) { break; }
+                    }
                 }
                 Err(_) => {
                     {
@@ -196,9 +205,25 @@ pub fn start_midi_listener(
 }
 
 fn try_connect_midi(session: SharedSession, attempt: u32) -> Result<(midir::MidiInputConnection<()>, String), Box<dyn std::error::Error + Send + Sync>> {
+    // Try up to 3 times with short delays — WinMM sometimes needs a moment
+    // to fully register a keyboard that was just powered on.
+    let mut last_err: Box<dyn std::error::Error + Send + Sync> = "No MIDI ports found".into();
+    for sub in 0..3u32 {
+        if sub > 0 {
+            thread::sleep(Duration::from_millis(400));
+        }
+        match try_connect_once(session.clone(), attempt * 10 + sub) {
+            Ok(result) => return Ok(result),
+            Err(e) => { last_err = e; }
+        }
+    }
+    Err(last_err)
+}
+
+fn try_connect_once(session: SharedSession, client_id: u32) -> Result<(midir::MidiInputConnection<()>, String), Box<dyn std::error::Error + Send + Sync>> {
     // Unique client name per attempt avoids WinMM rejecting re-registration
     // of a name it still considers active after a previous drop.
-    let client_name = format!("piano-tracker-{}", attempt);
+    let client_name = format!("piano-tracker-{}", client_id);
     let midi_in = MidiInput::new(&client_name)?;
     let ports = midi_in.ports();
     if ports.is_empty() {
