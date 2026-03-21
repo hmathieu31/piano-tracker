@@ -58,31 +58,32 @@ pub fn start_midi_listener(
     let session_for_debounce = session.clone();
 
     thread::spawn(move || {
+        let mut attempt: u32 = 0;
         loop {
-            match try_connect_midi(session_for_midi.clone()) {
-                Ok(conn) => {
-                    // Poll every 3s to detect if the device was unplugged / turned off
+            attempt = attempt.wrapping_add(1);
+            // Use a unique client name each attempt so WinMM doesn't reject
+            // re-registration of an already-known name after a clean drop.
+            match try_connect_midi(session_for_midi.clone(), attempt) {
+                Ok((conn, port_name)) => {
+                    // Poll port list every 2s to detect keyboard power-off.
+                    // On Windows/WinMM, USB MIDI ports disappear from the list
+                    // when the device is turned off or unplugged.
                     loop {
-                        thread::sleep(Duration::from_secs(3));
-                        let port_name = {
-                            let s = session_for_midi.lock().unwrap();
-                            s.midi_port_name.clone()
-                        };
-                        let still_connected = port_name.map_or(false, |name| {
-                            MidiInput::new("piano-tracker-probe")
-                                .map(|mi| mi.ports().iter().any(|p| mi.port_name(p).ok().as_deref() == Some(&name)))
-                                .unwrap_or(false)
-                        });
-                        if !still_connected {
+                        thread::sleep(Duration::from_secs(2));
+                        let gone = MidiInput::new("piano-tracker-probe")
+                            .map(|mi| mi.ports().iter()
+                                .all(|p| mi.port_name(p).ok().as_deref() != Some(port_name.as_str())))
+                            .unwrap_or(true);
+                        if gone {
                             let mut s = session_for_midi.lock().unwrap();
                             s.midi_connected = false;
                             s.midi_port_name = None;
-                            // leave last_midi_instant so the debounce thread can still end any active session
                             break;
                         }
                     }
                     drop(conn);
-                    thread::sleep(Duration::from_secs(3));
+                    // Give WinMM time to fully release the port before retrying
+                    thread::sleep(Duration::from_secs(2));
                 }
                 Err(_) => {
                     {
@@ -90,7 +91,7 @@ pub fn start_midi_listener(
                         s.midi_connected = false;
                         s.midi_port_name = None;
                     }
-                    thread::sleep(Duration::from_secs(5));
+                    thread::sleep(Duration::from_secs(3));
                 }
             }
         }
@@ -175,8 +176,11 @@ pub fn start_midi_listener(
     });
 }
 
-fn try_connect_midi(session: SharedSession) -> Result<midir::MidiInputConnection<()>, Box<dyn std::error::Error + Send + Sync>> {
-    let midi_in = MidiInput::new("piano-tracker")?;
+fn try_connect_midi(session: SharedSession, attempt: u32) -> Result<(midir::MidiInputConnection<()>, String), Box<dyn std::error::Error + Send + Sync>> {
+    // Unique client name per attempt avoids WinMM rejecting re-registration
+    // of a name it still considers active after a previous drop.
+    let client_name = format!("piano-tracker-{}", attempt);
+    let midi_in = MidiInput::new(&client_name)?;
     let ports = midi_in.ports();
     if ports.is_empty() {
         return Err("No MIDI ports found".into());
@@ -188,17 +192,16 @@ fn try_connect_midi(session: SharedSession) -> Result<midir::MidiInputConnection
     {
         let mut s = session.lock().unwrap();
         s.midi_connected = true;
-        s.midi_port_name = Some(port_name);
-        s.last_midi_instant = None; // clear stale state so reconnect doesn't immediately look like playing
+        s.midi_port_name = Some(port_name.clone());
+        s.last_midi_instant = None;
     }
 
     let session_cb = session.clone();
     let conn = midi_in.connect(port, "piano-tracker-input", move |_ts, msg, _| {
         if msg.is_empty() { return; }
         let status = msg[0];
-        // Only count note-on (0x90–0x9F) with velocity > 0.
-        // Filters out: Active Sensing (0xFE), MIDI Clock (0xF8),
-        // Note-off (0x80–0x8F), Program Change, Control Change, etc.
+        // Only note-on (0x90–0x9F) with velocity > 0 starts/extends a session.
+        // Active Sensing (0xFE), MIDI Clock (0xF8), note-off, CC etc. are ignored.
         let is_note_on = (status & 0xF0) == 0x90 && msg.len() >= 3 && msg[2] > 0;
         if is_note_on {
             let mut s = session_cb.lock().unwrap();
@@ -206,5 +209,5 @@ fn try_connect_midi(session: SharedSession) -> Result<midir::MidiInputConnection
         }
     }, ())?;
 
-    Ok(conn)
+    Ok((conn, port_name))
 }
