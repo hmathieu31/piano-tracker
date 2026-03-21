@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.7.0...piano-tracker-v1.7.1) (2026-03-21)
+
+
+### Bug Fixes
+
+* add missing difficulty field in row_to_session SongRecord initializer ([20d38c6](https://github.com/hmathieu31/piano-tracker/commit/20d38c623c1c79914ccca2f0e73a8a1313f09791))
+
 ## [1.7.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.6.0...piano-tracker-v1.7.0) (2026-03-21)
 
 
