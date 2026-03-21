@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import {
+  Tabs, Tab, Card, CardBody, Button, Chip, Modal, ModalContent,
+  ModalHeader, ModalBody, Image, Spinner,
+} from '@heroui/react';
 import { useSessions } from '../hooks/useData';
 import { useSongs } from '../hooks/useSongs';
 import { useMidiEvents } from '../hooks/useSongs';
@@ -65,162 +69,136 @@ function SessionDetailPanel({
   const durationMs = (session.end_ts - session.start_ts);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={onClose}>
-      <div
-        className="bg-[#16161d] border border-white/8 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
-        onClick={e => e.stopPropagation()}
-      >
-        {showSongModal && (
-          <SongSearchModal
-            sessionId={session.id}
-            recentSongs={[]}
-            onAssigned={onUpdate}
-            onClose={() => setShowSongModal(false)}
-          />
-        )}
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
-          <div>
-            <div className="text-base font-semibold text-white">{formatDate(session.date)}</div>
-            <div className="text-xs text-slate-500">{formatTime(session.start_ts)} → {formatTime(session.end_ts)}</div>
+    <Modal
+      isOpen
+      onClose={onClose}
+      size="2xl"
+      scrollBehavior="inside"
+      classNames={{
+        backdrop: 'bg-black/70',
+        base: 'bg-content1 border border-white/8',
+        header: 'border-b border-divider py-3',
+        body: 'py-5',
+      }}
+    >
+      <ModalContent>
+        <ModalHeader>
+          <div className="flex items-center justify-between w-full pr-2">
+            <div>
+              <div className="text-base font-semibold text-foreground">{formatDate(session.date)}</div>
+              <div className="text-xs text-foreground-400">{formatTime(session.start_ts)} → {formatTime(session.end_ts)}</div>
+            </div>
+            <Chip color="primary" variant="flat" size="sm" className="font-semibold">{formatDurationLong(session.duration_seconds)}</Chip>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sky-400 font-semibold">{formatDurationLong(session.duration_seconds)}</span>
-            <button onClick={onClose} className="text-slate-500 hover:text-slate-200 text-lg">✕</button>
-          </div>
-        </div>
+        </ModalHeader>
+        <ModalBody>
+          {showSongModal && (
+            <SongSearchModal
+              sessionId={session.id}
+              recentSongs={[]}
+              onAssigned={onUpdate}
+              onClose={() => setShowSongModal(false)}
+            />
+          )}
 
-        <div className="p-6 space-y-6">
-          {/* Song card */}
-          <div>
-            <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Song</div>
-            {session.song ? (
-              <div className="flex items-center gap-4 p-3 bg-[#1e1e2c] rounded-xl border border-white/5">
-                {session.song.cover_url ? (
-                  <img
-                    src={session.song.cover_url}
-                    alt={session.song.title}
-                    className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
-                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                  />
-                ) : (
-                  <div className="w-14 h-14 rounded-lg bg-[#252535] flex items-center justify-center text-2xl flex-shrink-0">🎵</div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-white truncate">{session.song.title}</div>
-                  {session.song.artist && <div className="text-xs text-slate-400 truncate">{session.song.artist}</div>}
-                  <div className="flex flex-wrap gap-2 mt-1.5">
-                    {session.song.genre && (
-                      <span className="px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 text-[10px]">{session.song.genre}</span>
-                    )}
-                    {session.song.album && (
-                      <span className="px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 text-[10px]">{session.song.album}</span>
-                    )}
-                    {session.song.year && (
-                      <span className="px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 text-[10px]">{session.song.year}</span>
-                    )}
-                    {session.song.spotify_url && (
-                      <a
-                        href={session.song.spotify_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 text-[10px] hover:bg-green-500/25 transition-colors"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        🎧 Spotify
-                      </a>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <button
-                    onClick={() => setShowSongModal(true)}
-                    className="text-xs text-slate-400 hover:text-white transition-colors"
-                  >
-                    Change
-                  </button>
-                  <button
-                    onClick={unlinkSong}
-                    className="text-xs text-slate-600 hover:text-red-400 transition-colors"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowSongModal(true)}
-                className="w-full flex items-center gap-3 p-3 rounded-xl border border-dashed border-white/10 hover:border-sky-500/30 text-sm text-slate-500 hover:text-slate-300 transition-colors"
-              >
-                <span className="text-lg">🎵</span>
-                Tag this session with a song…
-              </button>
-            )}
-          </div>
-
-          {/* Piano Roll */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Piano Roll</div>
-              {events.length > 0 && (
+          <div className="space-y-6">
+            {/* Song card */}
+            <div>
+              <p className="text-xs font-medium text-foreground-400 uppercase tracking-wide mb-2">Song</p>
+              {session.song ? (
+                <Card classNames={{ base: 'bg-content2 border border-divider' }}>
+                  <CardBody className="p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 rounded-xl overflow-hidden bg-content3 flex-shrink-0">
+                        {session.song.cover_url
+                          ? <Image src={session.song.cover_url} alt={session.song.title} className="w-14 h-14 object-cover" removeWrapper />
+                          : <div className="w-14 h-14 flex items-center justify-center text-2xl">🎵</div>
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-foreground truncate">{session.song.title}</div>
+                        {session.song.artist && <div className="text-xs text-foreground-400 truncate">{session.song.artist}</div>}
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {session.song.genre && <Chip size="sm" variant="flat" color="secondary" className="h-5 text-[10px]">{session.song.genre}</Chip>}
+                          {session.song.album && <Chip size="sm" variant="flat" className="h-5 text-[10px] bg-content3 text-foreground-400">{session.song.album}</Chip>}
+                          {session.song.year && <Chip size="sm" variant="flat" className="h-5 text-[10px] bg-content3 text-foreground-400">{session.song.year}</Chip>}
+                          {session.song.spotify_url && (
+                            <a href={session.song.spotify_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                              <Chip size="sm" variant="flat" color="success" className="h-5 text-[10px] cursor-pointer hover:opacity-80">🎧 Spotify</Chip>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1 flex-shrink-0">
+                        <Button size="sm" variant="light" onPress={() => setShowSongModal(true)} className="text-foreground-400 h-7 min-w-unit-16">Change</Button>
+                        <Button size="sm" variant="light" color="danger" onPress={unlinkSong} className="h-7 min-w-unit-16">Remove</Button>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
+              ) : (
                 <button
-                  onClick={exportMidi}
-                  disabled={exportingMidi}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 hover:border-sky-500/40 rounded-lg text-xs text-sky-400 transition-all disabled:opacity-50"
+                  onClick={() => setShowSongModal(true)}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-dashed border-white/10 hover:border-primary/30 text-sm text-foreground-500 hover:text-foreground transition-colors"
                 >
-                  ⬇ Export .mid
+                  <span className="text-lg">🎵</span>
+                  Tag this session with a song…
                 </button>
               )}
             </div>
-            {eventsLoading ? (
-              <div className="h-32 flex items-center justify-center text-slate-500 text-sm">Loading events…</div>
-            ) : events.length === 0 ? (
-              <div className="h-32 flex items-center justify-center text-slate-600 text-sm bg-[#1e1e2c] rounded-xl border border-white/5">
-                No MIDI events recorded
-              </div>
-            ) : (
-              <PianoRoll events={events} durationMs={durationMs} />
-            )}
-          </div>
 
-          {/* Note */}
-          <div>
-            <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Practice Note</div>
-            {editingNote ? (
-              <div className="flex gap-2">
-                <input
-                  autoFocus
-                  className="flex-1 bg-[#252533] border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500/50"
-                  value={note}
-                  onChange={e => setNote(e.target.value)}
-                  placeholder="What did you practice?"
-                  onKeyDown={e => { if (e.key === 'Enter') saveNote(); if (e.key === 'Escape') setEditingNote(false); }}
-                />
-                <button
-                  onClick={saveNote}
-                  disabled={savingNote}
-                  className="px-3 py-2 bg-sky-500 hover:bg-sky-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
-                >
-                  Save
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setEditingNote(true)}
-                className="w-full text-left p-3 rounded-xl bg-[#1e1e2c] border border-white/5 hover:border-white/10 transition-colors"
-              >
-                {session.note ? (
-                  <span className="text-sm text-slate-300 italic">"{session.note}"</span>
-                ) : (
-                  <span className="text-sm text-slate-600">+ Add a practice note…</span>
+            {/* Piano Roll */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-foreground-400 uppercase tracking-wide">Piano Roll</p>
+                {events.length > 0 && (
+                  <Button size="sm" variant="flat" color="primary" onPress={exportMidi} isLoading={exportingMidi} className="h-7 text-xs">
+                    ⬇ Export .mid
+                  </Button>
                 )}
-              </button>
-            )}
+              </div>
+              {eventsLoading ? (
+                <div className="h-32 flex items-center justify-center"><Spinner color="primary" /></div>
+              ) : events.length === 0 ? (
+                <Card classNames={{ base: 'bg-content2 border border-divider' }}>
+                  <CardBody className="h-24 flex items-center justify-center text-foreground-500 text-sm">No MIDI events recorded</CardBody>
+                </Card>
+              ) : (
+                <PianoRoll events={events} durationMs={durationMs} />
+              )}
+            </div>
+
+            {/* Practice Note */}
+            <div>
+              <p className="text-xs font-medium text-foreground-400 uppercase tracking-wide mb-2">Practice Note</p>
+              {editingNote ? (
+                <div className="flex gap-2">
+                  <input
+                    autoFocus
+                    className="flex-1 bg-content3 border border-divider rounded-xl px-3 py-2 text-sm text-foreground placeholder-foreground-500 focus:outline-none focus:border-primary/50"
+                    value={note}
+                    onChange={e => setNote(e.target.value)}
+                    placeholder="What did you practice?"
+                    onKeyDown={e => { if (e.key === 'Enter') saveNote(); if (e.key === 'Escape') setEditingNote(false); }}
+                  />
+                  <Button color="primary" size="sm" onPress={saveNote} isLoading={savingNote}>Save</Button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setEditingNote(true)}
+                  className="w-full text-left p-3 rounded-xl bg-content2 border border-divider hover:border-white/15 transition-colors"
+                >
+                  {session.note
+                    ? <span className="text-sm text-foreground-300 italic">"{session.note}"</span>
+                    : <span className="text-sm text-foreground-500">+ Add a practice note…</span>
+                  }
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
+        </ModalBody>
+      </ModalContent>
+    </Modal>
   );
 }
 
@@ -235,46 +213,46 @@ function SessionRow({ session, onUpdate }: { session: SessionRecord; onUpdate: (
         <SessionDetailPanel
           session={session}
           onClose={() => setShowDetail(false)}
-          onUpdate={() => { onUpdate(); }}
+          onUpdate={onUpdate}
         />
       )}
-      <button
-        className="w-full text-left bg-[#1e1e28] rounded-xl p-4 border border-white/5 hover:border-white/10 transition-colors"
-        onClick={() => setShowDetail(true)}
+      <Card
+        isPressable
+        onPress={() => setShowDetail(true)}
+        classNames={{ base: 'bg-content2 border border-white/5 hover:border-white/10 w-full', body: 'p-4' }}
       >
-        <div className="flex items-center gap-4">
-          {/* Song cover or color bar */}
-          {session.song?.cover_url ? (
-            <img
-              src={session.song.cover_url}
-              alt={session.song.title}
-              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
-          ) : (
-            <div className={`w-1 h-12 rounded-full flex-shrink-0 ${session.song ? 'bg-violet-500/60' : 'bg-sky-500/40'}`} />
+        <CardBody>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 bg-content3">
+              {session.song?.cover_url
+                ? <Image src={session.song.cover_url} alt={session.song.title ?? ''} className="w-10 h-10 object-cover" removeWrapper />
+                : <div className={`w-10 h-10 flex items-center justify-center ${session.song ? 'text-secondary' : 'text-primary/40'} text-lg`}>
+                    {session.song ? '🎵' : '🎹'}
+                  </div>
+              }
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium text-foreground">{formatDate(session.date)}</span>
+                {session.song && (
+                  <Chip size="sm" variant="flat" color="secondary" className="h-5 text-[10px]">{session.song.title}</Chip>
+                )}
+              </div>
+              <div className="text-xs text-foreground-400 mt-0.5">
+                {formatTime(session.start_ts)} → {formatTime(session.end_ts)}
+                {session.song?.artist && <span className="ml-2 text-foreground-500">· {session.song.artist}</span>}
+              </div>
+            </div>
+            <div className="text-right flex-shrink-0">
+              <div className="text-primary font-semibold text-sm">{formatDurationLong(session.duration_seconds)}</div>
+              <div className="text-[10px] text-foreground-500 mt-0.5">details →</div>
+            </div>
+          </div>
+          {session.note && (
+            <div className="mt-2 text-xs text-foreground-400 italic pl-14">"{session.note}"</div>
           )}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <div className="text-sm font-medium text-white">{formatDate(session.date)}</div>
-              {session.song && (
-                <span className="text-xs text-violet-400 truncate max-w-[160px]">{session.song.title}</span>
-              )}
-            </div>
-            <div className="text-xs text-slate-500 mt-0.5">
-              {formatTime(session.start_ts)} → {formatTime(session.end_ts)}
-              {session.song?.artist && <span className="ml-2 text-slate-600">· {session.song.artist}</span>}
-            </div>
-          </div>
-          <div className="text-right flex-shrink-0">
-            <div className="text-sky-400 font-semibold text-sm">{formatDurationLong(session.duration_seconds)}</div>
-            <div className="text-[10px] text-slate-600 mt-0.5">tap for detail →</div>
-          </div>
-        </div>
-        {session.note && (
-          <div className="mt-2 text-xs text-slate-500 italic pl-5">"{session.note}"</div>
-        )}
-      </button>
+        </CardBody>
+      </Card>
     </>
   );
 }
@@ -288,41 +266,35 @@ function BySongTab({ songs }: { songs: SongRecord[] }) {
   return (
     <div className="space-y-3">
       {songs.map(song => (
-        <div key={song.id} className="bg-[#1e1e28] rounded-xl p-4 border border-white/5 flex items-center gap-4">
-          {song.cover_url ? (
-            <img
-              src={song.cover_url}
-              alt={song.title}
-              className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
-              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
-          ) : (
-            <div className="w-14 h-14 rounded-xl bg-[#252535] flex items-center justify-center text-2xl flex-shrink-0">🎵</div>
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold text-white truncate">{song.title}</div>
-            <div className="text-xs text-slate-400 truncate">{song.artist ?? 'Unknown Artist'}</div>
-            <div className="flex flex-wrap gap-2 mt-1.5">
-              {song.genre && (
-                <span className="px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 text-[10px]">{song.genre}</span>
-              )}
-              {song.album && (
-                <span className="px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 text-[10px]">{song.album}</span>
-              )}
+        <Card key={song.id} classNames={{ base: 'bg-content2 border border-divider', body: 'p-3' }}>
+          <CardBody>
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14 rounded-xl overflow-hidden bg-content3 flex-shrink-0">
+                {song.cover_url
+                  ? <Image src={song.cover_url} alt={song.title} className="w-14 h-14 object-cover" removeWrapper />
+                  : <div className="w-14 h-14 flex items-center justify-center text-2xl">🎵</div>
+                }
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-foreground truncate">{song.title}</div>
+                <div className="text-xs text-foreground-400 truncate">{song.artist ?? 'Unknown Artist'}</div>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {song.genre && <Chip size="sm" variant="flat" color="secondary" className="h-5 text-[10px]">{song.genre}</Chip>}
+                  {song.album && <Chip size="sm" variant="flat" className="h-5 text-[10px] bg-content3 text-foreground-400">{song.album}</Chip>}
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="text-primary font-semibold text-sm">{formatDurationLong(song.total_seconds ?? 0)}</div>
+                <div className="text-xs text-foreground-500 mt-0.5">
+                  {song.session_count ?? 0} session{song.session_count !== 1 ? 's' : ''}
+                </div>
+                {song.last_played_date && (
+                  <div className="text-[10px] text-foreground-500 mt-0.5">Last: {song.last_played_date}</div>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="text-right flex-shrink-0">
-            <div className="text-sky-400 font-semibold text-sm">
-              {formatDurationLong(song.total_seconds ?? 0)}
-            </div>
-            <div className="text-xs text-slate-500 mt-0.5">
-              {song.session_count ?? 0} session{song.session_count !== 1 ? 's' : ''}
-            </div>
-            {song.last_played_date && (
-              <div className="text-[10px] text-slate-600 mt-0.5">Last: {song.last_played_date}</div>
-            )}
-          </div>
-        </div>
+          </CardBody>
+        </Card>
       ))}
     </div>
   );
@@ -354,22 +326,24 @@ function ByArtistTab({ songs }: { songs: SongRecord[] }) {
   return (
     <div className="space-y-4">
       {groups.map(g => (
-        <div key={g.artist} className="bg-[#1e1e28] rounded-xl border border-white/5 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-            <div className="font-medium text-white text-sm">{g.artist}</div>
-            <div className="text-xs text-slate-400">{formatDurationLong(g.totalSeconds)} · {g.sessionCount} sessions</div>
-          </div>
-          <div className="p-3 flex flex-wrap gap-2">
-            {g.songs.map(s => (
-              <div key={s.id} className="flex items-center gap-2 px-2.5 py-1 bg-[#252535] rounded-lg text-xs text-slate-300">
-                {s.cover_url && (
-                  <img src={s.cover_url} alt="" className="w-4 h-4 rounded object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                )}
-                {s.title}
-              </div>
-            ))}
-          </div>
-        </div>
+        <Card key={g.artist} classNames={{ base: 'bg-content2 border border-divider', body: 'p-0' }}>
+          <CardBody>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-divider">
+              <div className="font-medium text-foreground text-sm">{g.artist}</div>
+              <div className="text-xs text-foreground-400">{formatDurationLong(g.totalSeconds)} · {g.sessionCount} sessions</div>
+            </div>
+            <div className="p-3 flex flex-wrap gap-2">
+              {g.songs.map(s => (
+                <div key={s.id} className="flex items-center gap-2 px-2.5 py-1 bg-content3 rounded-lg text-xs text-foreground-300">
+                  {s.cover_url && (
+                    <Image src={s.cover_url} alt="" className="w-4 h-4 rounded object-cover" removeWrapper />
+                  )}
+                  {s.title}
+                </div>
+              ))}
+            </div>
+          </CardBody>
+        </Card>
       ))}
     </div>
   );
@@ -398,39 +372,37 @@ function ByGenreTab({ songs }: { songs: SongRecord[] }) {
 
   if (groups.length === 0) return <EmptyState label="No genres yet. Songs with genre data will appear here." />;
 
-  const GENRE_COLORS: Record<string, string> = {
-    classical: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
-    jazz: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
-    pop: 'bg-pink-500/15 text-pink-400 border-pink-500/20',
-    rock: 'bg-red-500/15 text-red-400 border-red-500/20',
-    electronic: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20',
-    default: 'bg-violet-500/15 text-violet-400 border-violet-500/20',
+  const GENRE_CHIP_COLOR: Record<string, 'warning' | 'primary' | 'danger' | 'success' | 'secondary' | 'default'> = {
+    classical: 'warning',
+    jazz: 'primary',
+    pop: 'danger',
+    rock: 'danger',
+    electronic: 'secondary',
   };
 
-  const colorFor = (genre: string) => {
-    const key = genre.toLowerCase();
-    return GENRE_COLORS[key] ?? GENRE_COLORS.default;
-  };
+  const colorFor = (genre: string) => GENRE_CHIP_COLOR[genre.toLowerCase()] ?? 'secondary';
 
   return (
     <div className="space-y-4">
       {groups.map(g => (
-        <div key={g.genre} className={`rounded-xl border p-4 ${colorFor(g.genre).replace('text-', 'border-').split(' ')[2]}`}>
-          <div className="flex items-center justify-between mb-3">
-            <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${colorFor(g.genre)}`}>{g.genre}</span>
-            <div className="text-xs text-slate-400">{formatDurationLong(g.totalSeconds)} · {g.sessionCount} sessions</div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {g.songs.map(s => (
-              <div key={s.id} className="flex items-center gap-2 px-2.5 py-1 bg-[#1a1a28] rounded-lg text-xs text-slate-300">
-                {s.cover_url && (
-                  <img src={s.cover_url} alt="" className="w-4 h-4 rounded object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                )}
-                <span className="truncate max-w-[120px]">{s.title}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <Card key={g.genre} classNames={{ base: 'bg-content2 border border-divider', body: 'p-4' }}>
+          <CardBody>
+            <div className="flex items-center justify-between mb-3">
+              <Chip size="sm" variant="flat" color={colorFor(g.genre)} className="font-medium">{g.genre}</Chip>
+              <span className="text-xs text-foreground-400">{formatDurationLong(g.totalSeconds)} · {g.sessionCount} sessions</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {g.songs.map(s => (
+                <div key={s.id} className="flex items-center gap-1.5 px-2.5 py-1 bg-content3 rounded-lg text-xs text-foreground-300">
+                  {s.cover_url && (
+                    <Image src={s.cover_url} alt="" className="w-4 h-4 rounded object-cover" removeWrapper />
+                  )}
+                  <span className="truncate max-w-[120px]">{s.title}</span>
+                </div>
+              ))}
+            </div>
+          </CardBody>
+        </Card>
       ))}
     </div>
   );
@@ -440,7 +412,7 @@ function ByGenreTab({ songs }: { songs: SongRecord[] }) {
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="text-center py-20 text-slate-500">
+    <div className="text-center py-20 text-foreground-500">
       <div className="text-4xl mb-3">🎹</div>
       <div className="text-sm max-w-xs mx-auto">{label}</div>
     </div>
@@ -449,19 +421,9 @@ function EmptyState({ label }: { label: string }) {
 
 // ── Main History Page ─────────────────────────────────────────────────────────
 
-type Tab = 'timeline' | 'songs' | 'artists' | 'genres';
-
 export default function History() {
   const { data: sessions, refresh } = useSessions(500);
   const { data: songs } = useSongs();
-  const [tab, setTab] = useState<Tab>('timeline');
-
-  const tabs: { id: Tab; label: string; icon: string }[] = [
-    { id: 'timeline', label: 'Timeline', icon: '📋' },
-    { id: 'songs', label: 'By Song', icon: '🎵' },
-    { id: 'artists', label: 'By Artist', icon: '🎤' },
-    { id: 'genres', label: 'By Genre', icon: '🎼' },
-  ];
 
   // Group timeline sessions by month
   const grouped = sessions.reduce((acc, s) => {
@@ -475,67 +437,64 @@ export default function History() {
   return (
     <div className="p-4 md:p-6 lg:p-8 fade-in">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-white">History</h1>
-        <p className="text-slate-500 text-sm mt-1">
+      <div className="mb-5">
+        <h1 className="text-2xl font-semibold text-foreground">History</h1>
+        <p className="text-foreground-400 text-sm mt-1">
           {sessions.length} sessions · {songs.length} songs tagged
         </p>
       </div>
 
-      {/* Tab Bar — scrollable on narrow windows */}
-      <div className="flex gap-1 bg-[#1e1e28] rounded-xl p-1 mb-6 border border-white/5 overflow-x-auto">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex-1 min-w-[80px] flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
-              tab === t.id
-                ? 'bg-sky-500/20 text-sky-400'
-                : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            <span>{t.icon}</span>
-            <span>{t.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Tab Content */}
-      {tab === 'timeline' && (
-        months.length === 0 ? (
-          <EmptyState label="No sessions yet. Start playing to record your first session!" />
-        ) : (
-          <div className="space-y-8">
-            {months.map(month => {
-              const monthSessions = grouped[month];
-              const totalSeconds = monthSessions.reduce((s, x) => s + x.duration_seconds, 0);
-              const [year, m] = month.split('-');
-              const monthLabel = new Date(parseInt(year), parseInt(m) - 1)
-                .toLocaleDateString([], { month: 'long', year: 'numeric' });
-
-              return (
-                <div key={month}>
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-medium text-slate-400">{monthLabel}</h2>
-                    <span className="text-xs text-slate-500">
-                      {monthSessions.length} sessions · {formatDurationLong(totalSeconds)}
-                    </span>
+      <Tabs
+        aria-label="History tabs"
+        color="primary"
+        variant="underlined"
+        classNames={{
+          tabList: 'gap-4 w-full border-b border-divider mb-5 overflow-x-auto',
+          cursor: 'bg-primary',
+          tab: 'min-w-max',
+        }}
+      >
+        <Tab key="timeline" title={<span className="flex items-center gap-1.5 text-sm">📋 Timeline</span>}>
+          {months.length === 0 ? (
+            <EmptyState label="No sessions yet. Start playing to record your first session!" />
+          ) : (
+            <div className="space-y-8 pt-2">
+              {months.map(month => {
+                const monthSessions = grouped[month];
+                const totalSeconds = monthSessions.reduce((s, x) => s + x.duration_seconds, 0);
+                const [year, m] = month.split('-');
+                const monthLabel = new Date(parseInt(year), parseInt(m) - 1)
+                  .toLocaleDateString([], { month: 'long', year: 'numeric' });
+                return (
+                  <div key={month}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-sm font-medium text-foreground-400">{monthLabel}</h2>
+                      <span className="text-xs text-foreground-500">
+                        {monthSessions.length} sessions · {formatDurationLong(totalSeconds)}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {monthSessions.map(s => <SessionRow key={s.id} session={s} onUpdate={refresh} />)}
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    {monthSessions.map(s => (
-                      <SessionRow key={s.id} session={s} onUpdate={refresh} />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )
-      )}
+                );
+              })}
+            </div>
+          )}
+        </Tab>
 
-      {tab === 'songs' && <BySongTab songs={songs} />}
-      {tab === 'artists' && <ByArtistTab songs={songs} />}
-      {tab === 'genres' && <ByGenreTab songs={songs} />}
+        <Tab key="songs" title={<span className="flex items-center gap-1.5 text-sm">🎵 By Song</span>}>
+          <div className="pt-2"><BySongTab songs={songs} /></div>
+        </Tab>
+
+        <Tab key="artists" title={<span className="flex items-center gap-1.5 text-sm">🎤 By Artist</span>}>
+          <div className="pt-2"><ByArtistTab songs={songs} /></div>
+        </Tab>
+
+        <Tab key="genres" title={<span className="flex items-center gap-1.5 text-sm">🎼 By Genre</span>}>
+          <div className="pt-2"><ByGenreTab songs={songs} /></div>
+        </Tab>
+      </Tabs>
     </div>
   );
 }
