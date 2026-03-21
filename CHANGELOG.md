@@ -1,11 +1,35 @@
 # Changelog
 
-## [0.4.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.6...piano-tracker-v0.4.0) (2026-03-21)
+## [1.0.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.4.0...piano-tracker-v1.0.0) (2026-03-21)
 
+### 🎉 First stable release
+
+Piano Tracker v1.0.0 is the first production-ready release. The core feature set —
+MIDI tracking, session storage, analytics, auto-updates, and system tray — is
+complete and stable.
 
 ### Features
 
-* manual MIDI reconnect button in sidebar ([783ed91](https://github.com/hmathieu31/piano-tracker/commit/783ed919b1058633bd09a0e202e9f66bc8b089a8))
+* **MIDI auto-detection** — connects on startup; note-on filter prevents idle-keyboard false positives
+* **Session tracking** — auto-saves sessions after configurable silence timeout
+* **Dashboard** — today's progress, streak, goal ring, recent sessions
+* **Charts** — daily/weekly bar charts, session length distribution
+* **Heatmap** — GitHub-style yearly activity calendar
+* **Insights** — best streak, average session, most productive day/time
+* **Achievements** — milestone badges for streaks, time goals, and firsts
+* **Goals** — configurable daily practice goal
+* **History** — full session log with inline notes
+* **Auto-updater** — silent background checks, one-click install & restart
+* **System tray** — minimize to tray, left-click to show, right-click menu
+* **Manual MIDI reconnect** — sidebar button to force reconnect without restarting
+* **Windows notifications** — daily reminder, streak-at-risk alert, weekly summary
+
+### Bug Fixes
+
+* Share updater state via context so banner and settings stay in sync
+* MIDI reconnection after keyboard power cycle
+* Idle keyboard no longer tracked as a session (note-on filter)
+* Tray icon and right-click context menu
 
 ## [0.3.6](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.5...piano-tracker-v0.3.6) (2026-03-21)
 
