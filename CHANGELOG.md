@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.6.0...piano-tracker-v1.7.0) (2026-03-21)
+
+
+### Features
+
+* add difficulty level (1-5) to songs ([84a0707](https://github.com/hmathieu31/piano-tracker/commit/84a0707d58ce5782e01be646617cf67690847fb7))
+
 ## [1.6.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.5.0...piano-tracker-v1.6.0) (2026-03-21)
 
 
