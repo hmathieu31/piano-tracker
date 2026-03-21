@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.6.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.5.0...piano-tracker-v1.6.0) (2026-03-21)
+
+
+### Features
+
+* **dev:** add simulation controls for session-ended and level-up prompt ([a1108f2](https://github.com/hmathieu31/piano-tracker/commit/a1108f2c0eeeab5be0eb85095b2643c19fba683e))
+* in-app session toast as gateway to tagging modal ([342b2af](https://github.com/hmathieu31/piano-tracker/commit/342b2afa813b58a65d5b01aa9d2020782a86faec))
+* post-session tagging modal with mastery suggestions ([4db4376](https://github.com/hmathieu31/piano-tracker/commit/4db43766d8b2470bac6b9990cbfd6581fd273d0d))
+* smart context-aware practice type suggestions in SessionTagModal ([22042f7](https://github.com/hmathieu31/piano-tracker/commit/22042f72bae9caf4f9e03f136d6cedaf5caa17b1))
+* smooth modal animations — framer-motion transitions + animated checkmark ([ee05f71](https://github.com/hmathieu31/piano-tracker/commit/ee05f71085e06e45f5b7f15694f6988c64158216))
+
+
+### Bug Fixes
+
+* animated checkmark SVG using framer-motion pathLength ([8b348aa](https://github.com/hmathieu31/piano-tracker/commit/8b348aacda9d54b771b67c2be278de7275ab8a19))
+* auto-delete orphan songs when all sessions are unlinked ([4add3d0](https://github.com/hmathieu31/piano-tracker/commit/4add3d0685b51a60bc5ce7d02538466cd7d20920))
+
 ## [1.5.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.4.0...piano-tracker-v1.5.0) (2026-03-21)
 
 
