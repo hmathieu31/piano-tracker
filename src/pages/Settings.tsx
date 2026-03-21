@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { Button, Switch, Card, CardBody, Slider, Chip } from '@heroui/react';
 import { useGoalsStatus } from '../hooks/useData';
-import { useUpdater } from '../hooks/useUpdater';
+import { useUpdaterContext } from '../context/UpdaterContext';
 
 function Section({ title, description, children }: {
   title: string; description?: string; children: React.ReactNode;
@@ -39,7 +39,7 @@ function Row({ label, description, children }: {
 
 export default function Settings() {
   const { data: goalsData, refresh: refreshGoals } = useGoalsStatus();
-  const { state: updaterState, checkForUpdates } = useUpdater();
+  const { state: updaterState, checkForUpdates } = useUpdaterContext();
 
   const [version, setVersion] = useState('');
   useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);

@@ -1,7 +1,7 @@
-import { useUpdater } from '../hooks/useUpdater';
+import { useUpdaterContext } from '../context/UpdaterContext';
 
 export default function UpdateBanner() {
-  const { state, installUpdate, dismiss } = useUpdater();
+  const { state, installUpdate, dismiss } = useUpdaterContext();
 
   if (state.phase === 'idle' || state.phase === 'checking' || state.phase === 'up-to-date') return null;
 
