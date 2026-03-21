@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useSessionStatus } from '../hooks/useData';
 import UpdateBanner from './UpdateBanner';
+import SessionToast from './SessionToast';
 import SessionTagModal from './SessionTagModal';
 import DevToolbar from './DevToolbar';
 import { getVersion } from '@tauri-apps/api/app';
@@ -47,13 +48,15 @@ export default function Layout() {
   const [reconnecting, setReconnecting] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [pendingSession, setPendingSession] = useState<{ id: number; duration: number } | null>(null);
+  const [showModal, setShowModal] = useState(false);
   const [devSuggestion, setDevSuggestion] = useState<MasterySuggestion | null>(null);
   useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
 
-  // Listen for session-ended and show the tagging modal
+  // session-ended → show the in-app toast (always, even when focused)
   useEffect(() => {
     const unlisten = listen<{ session_id: number; duration_seconds: number }>('session-ended', e => {
       setPendingSession({ id: e.payload.session_id, duration: e.payload.duration_seconds });
+      setShowModal(false); // always show toast first
     });
     return () => { unlisten.then(fn => fn()); };
   }, []);
@@ -77,11 +80,22 @@ export default function Layout() {
   return (
     <div className="flex h-screen bg-[#0f0f13] text-slate-100 overflow-hidden">
       <UpdateBanner />
-      {pendingSession && (
+
+      {/* Toast — always shown first after a session */}
+      {pendingSession && !showModal && (
+        <SessionToast
+          durationSeconds={pendingSession.duration}
+          onTag={() => setShowModal(true)}
+          onDismiss={() => setPendingSession(null)}
+        />
+      )}
+
+      {/* Modal — only opens after user clicks "Tag it" in the toast */}
+      {pendingSession && showModal && (
         <SessionTagModal
           sessionId={pendingSession.id}
           durationSeconds={pendingSession.duration}
-          onClose={() => setPendingSession(null)}
+          onClose={() => { setPendingSession(null); setShowModal(false); }}
         />
       )}
       {devSuggestion && (
