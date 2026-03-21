@@ -131,6 +131,7 @@ pub fn run() {
             // Song management
             commands::create_song,
             commands::update_song_genre,
+            commands::update_song_difficulty,
             commands::get_songs,
             commands::get_song_stats,
             commands::get_recent_songs,

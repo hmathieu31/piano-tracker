@@ -4,6 +4,7 @@ import {
   Modal, ModalContent, ModalBody,
   Chip, Image, Button, Input, Spinner,
 } from '@heroui/react';
+import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { SongRecord } from '../types';
 import { useSongsWithStats, useSongDetail } from '../hooks/useData';
@@ -11,6 +12,7 @@ import { formatDurationLong } from '../utils';
 import MasteryBadge from '../components/MasteryBadge';
 import MoodTrendChart from '../components/MoodTrendChart';
 import FeelingPicker, { feelingEmoji } from '../components/FeelingPicker';
+import { DifficultyDots, DifficultyPicker } from '../components/DifficultyDots';
 
 // ── Cover art placeholder gradients ─────────────────────────────────────────
 const COVER_GRADIENTS = [
@@ -143,13 +145,24 @@ function SongDetailModal({
 }: { songId: number | null; onClose: () => void; onSongUpdated: () => void }) {
   const { data: detail, loading, refresh } = useSongDetail(songId);
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
+  const [currentDifficulty, setCurrentDifficulty] = useState<number | null>(null);
 
   useEffect(() => {
-    if (detail) setCurrentStatus(detail.song.status ?? 'learning');
+    if (detail) {
+      setCurrentStatus(detail.song.status ?? 'learning');
+      setCurrentDifficulty(detail.song.difficulty ?? null);
+    }
   }, [detail]);
 
   const handleStatusChange = (next: string) => {
     setCurrentStatus(next);
+    onSongUpdated();
+  };
+
+  const handleDifficultyChange = async (val: number | null) => {
+    if (!songId) return;
+    setCurrentDifficulty(val);
+    await invoke('update_song_difficulty', { songId, difficulty: val });
     onSongUpdated();
   };
 
@@ -221,6 +234,9 @@ function SongDetailModal({
                         ♪ Open in Spotify
                       </Button>
                     )}
+                  </div>
+                  <div className="mt-2">
+                    <DifficultyPicker value={currentDifficulty} onChange={handleDifficultyChange} />
                   </div>
                 </div>
               </div>
@@ -329,6 +345,7 @@ function KanbanCard({ song, onSelect }: { song: SongRecord; onSelect: (id: numbe
             {recencyLabel && (
               <span className="text-[10px] text-foreground-600">{recencyLabel}</span>
             )}
+            <DifficultyDots value={song.difficulty} />
           </div>
         </div>
         {song.avg_feeling != null && (
@@ -437,6 +454,7 @@ function CollectionCard({ song, onSelect }: { song: SongRecord; onSelect: (id: n
         {(song.total_seconds ?? 0) > 0 && (
           <div className="text-[10px] text-foreground-600">{formatDurationLong(song.total_seconds ?? 0)}</div>
         )}
+        <DifficultyDots value={song.difficulty} />
       </div>
     </button>
   );

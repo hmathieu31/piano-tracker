@@ -5,6 +5,7 @@ import { Button, Textarea, Image, Chip } from '@heroui/react';
 import { searchRecordings, type MBSearchResult } from '../api/musicSearch';
 import type { SongRecord, MasterySuggestion } from '../types';
 import confetti from 'canvas-confetti';
+import { DifficultyDots } from './DifficultyDots';
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -279,6 +280,7 @@ export default function SessionTagModal({ sessionId, durationSeconds, onClose, d
         title: result.title, artist: result.artist, genre: result.genre,
         album: result.album, year: result.year, coverUrl: result.coverUrl,
         spotifyUrl: result.spotifyUrl, mbRecordingId: result.recordingId, mbReleaseId: result.releaseId,
+        difficulty: null,
       });
       const song: SongRecord = {
         id: songId, title: result.title, artist: result.artist, genre: result.genre,
@@ -298,6 +300,7 @@ export default function SessionTagModal({ sessionId, durationSeconds, onClose, d
       const songId = await invoke<number>('create_song', {
         title: searchQuery.trim(), artist: null, genre: null, album: null,
         year: null, coverUrl: null, spotifyUrl: null, mbRecordingId: null, mbReleaseId: null,
+        difficulty: null,
       });
       handlePickSong({ id: songId, title: searchQuery.trim(), artist: null, genre: null, album: null, year: null, cover_url: null, spotify_url: null, musicbrainz_recording_id: null, musicbrainz_release_id: null, created_at: Date.now(), session_count: 0 });
     } catch { } finally { setSaving(false); }
@@ -419,6 +422,7 @@ export default function SessionTagModal({ sessionId, durationSeconds, onClose, d
                                 {MOOD_EMOJIS[Math.round(song.avg_feeling) - 1] ?? ''}
                               </span>
                             )}
+                            <DifficultyDots value={song.difficulty} />
                             <svg className="w-3.5 h-3.5 text-slate-700 group-hover:text-slate-500 flex-shrink-0 transition-colors" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M6 4l4 4-4 4"/></svg>
                           </button>
                         );

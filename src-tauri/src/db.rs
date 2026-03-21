@@ -22,6 +22,7 @@ pub struct SongRecord {
     // Learning journey fields
     pub avg_feeling: Option<f64>,
     pub status: Option<String>,
+    pub difficulty: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -181,6 +182,7 @@ impl Database {
         let _ = conn.execute("ALTER TABLE sessions ADD COLUMN feeling INTEGER", []);
         let _ = conn.execute("ALTER TABLE sessions ADD COLUMN practice_type TEXT", []);
         let _ = conn.execute("ALTER TABLE songs ADD COLUMN status TEXT DEFAULT 'learning'", []);
+        let _ = conn.execute("ALTER TABLE songs ADD COLUMN difficulty INTEGER", []);
         // Clean up any pre-existing orphan songs (songs with no sessions)
         let _ = conn.execute(
             "DELETE FROM songs WHERE NOT EXISTS (SELECT 1 FROM sessions WHERE song_id = songs.id)",
@@ -640,16 +642,17 @@ impl Database {
         spotify_url: Option<&str>,
         mb_recording_id: Option<&str>,
         mb_release_id: Option<&str>,
+        difficulty: Option<i32>,
     ) -> Result<i64, rusqlite::Error> {
         use std::time::{SystemTime, UNIX_EPOCH};
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO songs (title, artist, genre, album, year, cover_url, spotify_url,
-                               musicbrainz_recording_id, musicbrainz_release_id, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                               musicbrainz_recording_id, musicbrainz_release_id, created_at, difficulty)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![title, artist, genre, album, year, cover_url, spotify_url,
-                    mb_recording_id, mb_release_id, now],
+                    mb_recording_id, mb_release_id, now, difficulty],
         )?;
         Ok(conn.last_insert_rowid())
     }
@@ -657,6 +660,12 @@ impl Database {
     pub fn update_song_genre(&self, song_id: i64, genre: &str) -> Result<(), rusqlite::Error> {
         let conn = self.conn.lock().unwrap();
         conn.execute("UPDATE songs SET genre = ?1 WHERE id = ?2", params![genre, song_id])?;
+        Ok(())
+    }
+
+    pub fn update_song_difficulty(&self, song_id: i64, difficulty: Option<i32>) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE songs SET difficulty = ?1 WHERE id = ?2", params![difficulty, song_id])?;
         Ok(())
     }
 
@@ -678,6 +687,7 @@ impl Database {
             last_played_date: row.get(13).ok().flatten(),
             avg_feeling: row.get(14).ok().flatten(),
             status: row.get(15).ok().flatten(),
+            difficulty: row.get(16).ok().flatten(),
         })
     }
 
@@ -686,7 +696,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, title, artist, genre, album, year, cover_url, spotify_url,
                     musicbrainz_recording_id, musicbrainz_release_id, created_at,
-                    NULL, NULL, NULL, NULL, status
+                    NULL, NULL, NULL, NULL, status, difficulty
              FROM songs ORDER BY title ASC"
         )?;
         let rows = stmt.query_map([], Self::row_to_song_stats)?;
@@ -703,7 +713,7 @@ impl Database {
                     COUNT(s.id) as session_count,
                     MAX(s.date) as last_played_date,
                     AVG(s.feeling) as avg_feeling,
-                    sg.status
+                    sg.status, sg.difficulty
              FROM songs sg
              INNER JOIN sessions s ON s.song_id = sg.id
              GROUP BY sg.id
@@ -723,7 +733,7 @@ impl Database {
                     COUNT(s.id) as session_count,
                     MAX(s.date) as last_played_date,
                     AVG(s.feeling) as avg_feeling,
-                    sg.status
+                    sg.status, sg.difficulty
              FROM songs sg
              INNER JOIN sessions s ON s.song_id = sg.id
              GROUP BY sg.id
@@ -956,7 +966,7 @@ impl Database {
                     COUNT(s.id),
                     MAX(s.date),
                     AVG(s.feeling),
-                    sg.status
+                    sg.status, sg.difficulty
              FROM songs sg
              LEFT JOIN sessions s ON s.song_id = sg.id
              WHERE sg.id = ?1

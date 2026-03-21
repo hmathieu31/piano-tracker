@@ -138,6 +138,7 @@ pub fn create_song(
     spotify_url: Option<String>,
     mb_recording_id: Option<String>,
     mb_release_id: Option<String>,
+    difficulty: Option<i32>,
 ) -> Result<i64, String> {
     db.create_song(
         &title,
@@ -149,12 +150,18 @@ pub fn create_song(
         spotify_url.as_deref(),
         mb_recording_id.as_deref(),
         mb_release_id.as_deref(),
+        difficulty,
     ).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn update_song_genre(db: State<DbState>, song_id: i64, genre: String) -> Result<(), String> {
     db.update_song_genre(song_id, &genre).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_song_difficulty(db: State<DbState>, song_id: i64, difficulty: Option<i32>) -> Result<(), String> {
+    db.update_song_difficulty(song_id, difficulty).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

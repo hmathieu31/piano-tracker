@@ -17,6 +17,7 @@ export interface SongRecord {
   // learning journey
   avg_feeling?: number | null;
   status?: string | null;
+  difficulty?: number | null;
 }
 
 export interface SongDetail {

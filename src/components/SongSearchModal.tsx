@@ -57,6 +57,7 @@ export default function SongSearchModal({ sessionId, recentSongs, onAssigned, on
         spotifyUrl: result.spotifyUrl,
         mbRecordingId: result.recordingId,
         mbReleaseId: result.releaseId,
+        difficulty: null,
       });
       await invoke('link_session_song', { sessionId, songId });
       onAssigned();
@@ -89,6 +90,7 @@ export default function SongSearchModal({ sessionId, recentSongs, onAssigned, on
         title: query.trim(),
         artist: null, genre: null, album: null, year: null,
         coverUrl: null, spotifyUrl: null, mbRecordingId: null, mbReleaseId: null,
+        difficulty: null,
       });
       await invoke('link_session_song', { sessionId, songId });
       onAssigned();
