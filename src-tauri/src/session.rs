@@ -33,6 +33,12 @@ pub struct SessionStatus {
     pub midi_connected: bool,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SessionEndedPayload {
+    pub session_id: i64,
+    pub duration_seconds: i64,
+}
+
 pub fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -186,7 +192,10 @@ pub fn start_midi_listener(
                                     }
                                 }
                             }
-                            let _ = app_debounce.emit("session-ended", session_id);
+                            let _ = app_debounce.emit("session-ended", crate::session::SessionEndedPayload {
+                                session_id,
+                                duration_seconds,
+                            });
 
                             // Show a Windows toast if the app isn't in the foreground,
                             // so the user knows to open it and tag the session.

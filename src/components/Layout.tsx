@@ -1,9 +1,10 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useSessionStatus } from '../hooks/useData';
 import UpdateBanner from './UpdateBanner';
-import QuickAssociateBanner from './QuickAssociateBanner';
+import SessionTagModal from './SessionTagModal';
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { onAction } from '@tauri-apps/plugin-notification';
 import { useState, useEffect, useCallback } from 'react';
@@ -43,7 +44,16 @@ export default function Layout() {
   const [version, setVersion] = useState('');
   const [reconnecting, setReconnecting] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [pendingSession, setPendingSession] = useState<{ id: number; duration: number } | null>(null);
   useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
+
+  // Listen for session-ended and show the tagging modal
+  useEffect(() => {
+    const unlisten = listen<{ session_id: number; duration_seconds: number }>('session-ended', e => {
+      setPendingSession({ id: e.payload.session_id, duration: e.payload.duration_seconds });
+    });
+    return () => { unlisten.then(fn => fn()); };
+  }, []);
 
   useEffect(() => {
     const appWindow = getCurrentWebviewWindow();
@@ -64,7 +74,13 @@ export default function Layout() {
   return (
     <div className="flex h-screen bg-[#0f0f13] text-slate-100 overflow-hidden">
       <UpdateBanner />
-      <QuickAssociateBanner />
+      {pendingSession && (
+        <SessionTagModal
+          sessionId={pendingSession.id}
+          durationSeconds={pendingSession.duration}
+          onClose={() => setPendingSession(null)}
+        />
+      )}
 
       {/* Sidebar */}
       <aside className={`flex-shrink-0 bg-[#16161d] border-r border-white/5 flex flex-col transition-all duration-200 ${collapsed ? 'w-14' : 'w-52'}`}>

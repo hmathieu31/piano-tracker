@@ -49,7 +49,16 @@ pub struct SessionRecord {
     pub song_id: Option<i64>,
     pub song_name: Option<String>,
     pub feeling: Option<i64>,
+    pub practice_type: Option<String>,
     pub song: Option<SongRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MasterySuggestion {
+    pub song_id: i64,
+    pub song_title: String,
+    pub current_status: String,
+    pub suggested_status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -170,6 +179,7 @@ impl Database {
         let _ = conn.execute("ALTER TABLE sessions ADD COLUMN song_id INTEGER REFERENCES songs(id)", []);
         let _ = conn.execute("ALTER TABLE sessions ADD COLUMN song_name TEXT", []);
         let _ = conn.execute("ALTER TABLE sessions ADD COLUMN feeling INTEGER", []);
+        let _ = conn.execute("ALTER TABLE sessions ADD COLUMN practice_type TEXT", []);
         let _ = conn.execute("ALTER TABLE songs ADD COLUMN status TEXT DEFAULT 'learning'", []);
         // Clean up any pre-existing orphan songs (songs with no sessions)
         let _ = conn.execute(
@@ -197,24 +207,24 @@ impl Database {
     fn row_to_session(row: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
         let song_id: Option<i64> = row.get(6)?;
         let song = if let Some(id) = song_id {
-            let sg_title: Option<String> = row.get(10)?;
+            let sg_title: Option<String> = row.get(11)?;
             sg_title.map(|title| SongRecord {
                 id,
                 title,
-                artist: row.get(11).ok().flatten(),
-                genre: row.get(12).ok().flatten(),
-                album: row.get(13).ok().flatten(),
-                year: row.get(14).ok().flatten(),
-                cover_url: row.get(15).ok().flatten(),
-                spotify_url: row.get(16).ok().flatten(),
-                musicbrainz_recording_id: row.get(17).ok().flatten(),
-                musicbrainz_release_id: row.get(18).ok().flatten(),
-                created_at: row.get(19).unwrap_or(0),
+                artist: row.get(12).ok().flatten(),
+                genre: row.get(13).ok().flatten(),
+                album: row.get(14).ok().flatten(),
+                year: row.get(15).ok().flatten(),
+                cover_url: row.get(16).ok().flatten(),
+                spotify_url: row.get(17).ok().flatten(),
+                musicbrainz_recording_id: row.get(18).ok().flatten(),
+                musicbrainz_release_id: row.get(19).ok().flatten(),
+                created_at: row.get(20).unwrap_or(0),
                 total_seconds: None,
                 session_count: None,
                 last_played_date: None,
                 avg_feeling: None,
-                status: row.get(20).ok().flatten(),
+                status: row.get(21).ok().flatten(),
             })
         } else {
             None
@@ -229,6 +239,7 @@ impl Database {
             song_id: row.get(6)?,
             song_name: row.get(7)?,
             feeling: row.get(8)?,
+            practice_type: row.get(9)?,
             song,
         })
     }
@@ -237,7 +248,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT s.id, s.date, s.start_ts, s.end_ts, s.duration_seconds, s.note,
-                    s.song_id, s.song_name, s.feeling,
+                    s.song_id, s.song_name, s.feeling, s.practice_type,
                     sg.id, sg.title, sg.artist, sg.genre, sg.album, sg.year,
                     sg.cover_url, sg.spotify_url, sg.musicbrainz_recording_id,
                     sg.musicbrainz_release_id, sg.created_at, sg.status
@@ -253,7 +264,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT s.id, s.date, s.start_ts, s.end_ts, s.duration_seconds, s.note,
-                    s.song_id, s.song_name, s.feeling,
+                    s.song_id, s.song_name, s.feeling, s.practice_type,
                     sg.id, sg.title, sg.artist, sg.genre, sg.album, sg.year,
                     sg.cover_url, sg.spotify_url, sg.musicbrainz_recording_id,
                     sg.musicbrainz_release_id, sg.created_at, sg.status
@@ -772,6 +783,151 @@ impl Database {
             Self::delete_if_orphan(&conn, id)?;
         }
         Ok(())
+    }
+
+    /// Tag a session: atomically set song, feeling, practice_type and note, then
+    /// check whether the song is ready to advance to the next mastery stage.
+    pub fn tag_session(
+        &self,
+        session_id: i64,
+        song_id: Option<i64>,
+        feeling: Option<i64>,
+        practice_type: Option<&str>,
+        note: Option<&str>,
+    ) -> Result<Option<MasterySuggestion>, rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+
+        // Capture old song so we can orphan-check it after reassignment
+        let old_song_id: Option<i64> = conn.query_row(
+            "SELECT song_id FROM sessions WHERE id = ?1",
+            params![session_id],
+            |row| row.get(0),
+        ).ok().flatten();
+
+        conn.execute(
+            "UPDATE sessions SET song_id = ?1, feeling = ?2, practice_type = ?3,
+                     note = CASE WHEN ?4 IS NOT NULL THEN ?4 ELSE note END
+             WHERE id = ?5",
+            params![song_id, feeling, practice_type, note, session_id],
+        )?;
+
+        if let Some(sid) = song_id {
+            // Sync song_name onto the session row for display in History
+            let title: Option<String> = conn.query_row(
+                "SELECT title FROM songs WHERE id = ?1", params![sid], |r| r.get(0)
+            ).ok();
+            if let Some(t) = title {
+                conn.execute(
+                    "UPDATE sessions SET song_name = ?1 WHERE id = ?2",
+                    params![t, session_id],
+                )?;
+            }
+            // If we displaced a different song, remove it if now orphaned
+            if let Some(old_id) = old_song_id {
+                if old_id != sid {
+                    Self::delete_if_orphan(&conn, old_id)?;
+                }
+            }
+        } else if let Some(old_id) = old_song_id {
+            // Song was removed — clear song_name too and orphan-check
+            conn.execute("UPDATE sessions SET song_name = NULL WHERE id = ?1", params![session_id])?;
+            Self::delete_if_orphan(&conn, old_id)?;
+        }
+
+        // Check if this song is ready to advance to the next mastery stage
+        let suggestion = if let Some(sid) = song_id {
+            Self::compute_mastery_suggestion_inner(&conn, sid)?
+        } else {
+            None
+        };
+
+        Ok(suggestion)
+    }
+
+    /// Advance a song's mastery status (called after user confirms the suggestion).
+    pub fn confirm_mastery_advance(&self, song_id: i64, new_status: &str) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE songs SET status = ?1 WHERE id = ?2",
+            params![new_status, song_id],
+        )?;
+        Ok(())
+    }
+
+    fn compute_mastery_suggestion_inner(
+        conn: &rusqlite::Connection,
+        song_id: i64,
+    ) -> Result<Option<MasterySuggestion>, rusqlite::Error> {
+        let current: Option<String> = conn.query_row(
+            "SELECT status FROM songs WHERE id = ?1",
+            params![song_id],
+            |row| row.get(0),
+        ).ok().flatten();
+        let title: String = conn.query_row(
+            "SELECT title FROM songs WHERE id = ?1",
+            params![song_id],
+            |row| row.get(0),
+        )?;
+        let current_str = current.as_deref().unwrap_or("learning");
+
+        match current_str {
+            "learning" => {
+                // Need ≥3 tagged sessions, of which ≥2 are 'full' or 'performance'
+                let types: Vec<Option<String>> = {
+                    let mut stmt = conn.prepare(
+                        "SELECT practice_type FROM sessions WHERE song_id = ?1
+                         AND practice_type IS NOT NULL
+                         ORDER BY start_ts DESC LIMIT 3"
+                    )?;
+                    let collected: Vec<Option<String>> = stmt.query_map(params![song_id], |row| row.get(0))?.filter_map(|r| r.ok()).collect();
+                    collected
+                };
+                if types.len() >= 3 {
+                    let strong = types.iter().filter(|t| {
+                        matches!(t.as_deref(), Some("full") | Some("performance"))
+                    }).count();
+                    if strong >= 2 {
+                        return Ok(Some(MasterySuggestion {
+                            song_id,
+                            song_title: title,
+                            current_status: "learning".to_string(),
+                            suggested_status: "practicing".to_string(),
+                        }));
+                    }
+                }
+            }
+            "practicing" => {
+                // Need ≥7 tagged sessions, of which ≥5 are 'performance' AND avg mood ≥4
+                let rows: Vec<(Option<String>, Option<i64>)> = {
+                    let mut stmt = conn.prepare(
+                        "SELECT practice_type, feeling FROM sessions WHERE song_id = ?1
+                         AND practice_type IS NOT NULL
+                         ORDER BY start_ts DESC LIMIT 7"
+                    )?;
+                    let collected: Vec<(Option<String>, Option<i64>)> = stmt.query_map(params![song_id], |row| {
+                        Ok((row.get(0)?, row.get(1)?))
+                    })?.filter_map(|r| r.ok()).collect();
+                    collected
+                };
+                if rows.len() >= 7 {
+                    let perf = rows.iter().filter(|(t, _)| t.as_deref() == Some("performance")).count();
+                    let rated: Vec<i64> = rows.iter().filter_map(|(_, f)| *f).collect();
+                    let avg = if rated.is_empty() { 0.0 } else {
+                        rated.iter().sum::<i64>() as f64 / rated.len() as f64
+                    };
+                    if perf >= 5 && avg >= 4.0 {
+                        return Ok(Some(MasterySuggestion {
+                            song_id,
+                            song_title: title,
+                            current_status: "practicing".to_string(),
+                            suggested_status: "mastered".to_string(),
+                        }));
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(None)
     }
 
     pub fn set_session_feeling(&self, session_id: i64, feeling: Option<i64>) -> Result<(), rusqlite::Error> {

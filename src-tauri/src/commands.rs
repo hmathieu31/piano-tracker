@@ -2,7 +2,8 @@ use tauri::State;
 use tauri::Manager;
 use std::sync::Arc;
 use crate::db::{Database, SessionRecord, DailyTotal, GoalsConfig, StreakInfo, InsightsData,
-                GoalsStatus, AchievementInfo, SongRecord, SongDetail, MidiEventRecord};
+                GoalsStatus, AchievementInfo, SongRecord, SongDetail, MidiEventRecord,
+                MasterySuggestion};
 use crate::session::{SharedSession, SessionStatus, get_status};
 
 pub type DbState = Arc<Database>;
@@ -92,6 +93,34 @@ pub fn get_all_songs_with_stats(db: State<DbState>) -> Result<Vec<SongRecord>, S
 #[tauri::command]
 pub fn get_song_with_sessions(db: State<DbState>, song_id: i64) -> Result<Option<SongDetail>, String> {
     db.get_song_with_sessions(song_id).map_err(|e| e.to_string())
+}
+
+// ── Post-session tagging ─────────────────────────────────────────────────────
+
+/// Atomically tag a session with song, feeling, practice type, and note.
+/// Returns a mastery suggestion if the song is ready to advance, otherwise None.
+#[tauri::command]
+pub fn tag_session(
+    db: State<DbState>,
+    session_id: i64,
+    song_id: Option<i64>,
+    feeling: Option<i64>,
+    practice_type: Option<String>,
+    note: Option<String>,
+) -> Result<Option<MasterySuggestion>, String> {
+    db.tag_session(
+        session_id,
+        song_id,
+        feeling,
+        practice_type.as_deref(),
+        note.as_deref(),
+    ).map_err(|e| e.to_string())
+}
+
+/// Advance a song's mastery status after the user confirms a suggestion.
+#[tauri::command]
+pub fn confirm_mastery_advance(db: State<DbState>, song_id: i64, new_status: String) -> Result<(), String> {
+    db.confirm_mastery_advance(song_id, &new_status).map_err(|e| e.to_string())
 }
 
 // ── Song management commands ─────────────────────────────────────────────────

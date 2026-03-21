@@ -43,7 +43,15 @@ export interface SessionRecord {
   song_id: number | null;
   song_name: string | null;
   feeling: number | null;
+  practice_type: string | null;
   song: SongRecord | null;
+}
+
+export interface MasterySuggestion {
+  song_id: number;
+  song_title: string;
+  current_status: string;
+  suggested_status: string;
 }
 
 export interface DailyTotal {

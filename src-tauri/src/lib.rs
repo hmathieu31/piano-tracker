@@ -146,6 +146,9 @@ pub fn run() {
             commands::set_song_status,
             commands::get_all_songs_with_stats,
             commands::get_song_with_sessions,
+            // Post-session tagging
+            commands::tag_session,
+            commands::confirm_mastery_advance,
             // Dev / demo data
             commands::seed_dev_data,
             commands::clear_dev_data,
