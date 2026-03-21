@@ -41,7 +41,8 @@ export async function searchRecordings(query: string): Promise<MBSearchResult[]>
     const yearStr = t.releaseDate?.slice(0, 4);
     const year = yearStr ? parseInt(yearStr, 10) : null;
 
-    const spotifyUrl = `https://open.spotify.com/search/${encodeURIComponent(`${t.trackName} ${t.artistName}`)}`;
+    // spotify: URI opens directly in the desktop app (Spotify must be installed)
+    const spotifyUrl = `spotify:search:${encodeURIComponent(`${t.trackName} ${t.artistName}`)}`;
 
     return {
       recordingId: String(t.trackId),
