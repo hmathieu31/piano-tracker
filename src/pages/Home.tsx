@@ -7,16 +7,6 @@ import { formatDuration, formatDurationLong } from '../utils';
 import { feelingEmoji } from '../components/FeelingPicker';
 import MasteryBadge from '../components/MasteryBadge';
 
-function moodTrend(sessions: { feeling: number | null }[]): 'up' | 'down' | 'flat' | null {
-  const rated = sessions.filter(s => s.feeling != null).slice(0, 6);
-  if (rated.length < 4) return null;
-  const recent = rated.slice(0, 3).reduce((a, s) => a + s.feeling!, 0) / 3;
-  const older  = rated.slice(3).reduce((a, s) => a + s.feeling!, 0) / rated.slice(3).length;
-  if (recent > older + 0.4) return 'up';
-  if (recent < older - 0.4) return 'down';
-  return 'flat';
-}
-
 export default function Home() {
   const status = useSessionStatus();
   const streak = useStreak();
@@ -34,6 +24,17 @@ export default function Home() {
     .filter(s => s.status === 'learning' || s.status === 'practicing')
     .sort((a, b) => (b.last_played_date ?? '').localeCompare(a.last_played_date ?? ''))
     .slice(0, 4);
+
+  // Songs not played in 14+ days that are mastered (forgetting curve nudge)
+  const today = new Date().toISOString().slice(0, 10);
+  const needsReview = allSongs
+    .filter(s => {
+      if (!s.last_played_date) return false;
+      const daysSince = Math.floor((Date.parse(today) - Date.parse(s.last_played_date)) / 86400000);
+      return daysSince >= 14 && (s.status === 'mastered' || s.status === 'practicing');
+    })
+    .sort((a, b) => (a.last_played_date ?? '').localeCompare(b.last_played_date ?? ''))
+    .slice(0, 3);
 
   const masteredCount = allSongs.filter(s => s.status === 'mastered').length;
   const totalHours = allSongs.reduce((a, s) => a + (s.total_seconds ?? 0), 0);
@@ -137,25 +138,27 @@ export default function Home() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-foreground-300 uppercase tracking-wide">In Progress</h2>
-          <NavLink to="/library" className="text-xs text-primary hover:text-primary/80 transition-colors">
-            View Library →
+          <NavLink to="/repertoire" className="text-xs text-primary hover:text-primary/80 transition-colors">
+            View Repertoire →
           </NavLink>
         </div>
         {inProgressSongs.length === 0 ? (
           <Card classNames={{ base: 'bg-content2 border border-dashed border-divider', body: 'p-6 text-center' }}>
             <CardBody>
               <div className="text-foreground-500 text-sm">No songs in progress yet.</div>
-              <NavLink to="/library" className="text-primary text-sm mt-1 hover:underline block">
-                Go to Library to add songs →
+              <NavLink to="/repertoire" className="text-primary text-sm mt-1 hover:underline block">
+                Go to Repertoire to add songs →
               </NavLink>
             </CardBody>
           </Card>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {inProgressSongs.map(song => {
-              const trend = moodTrend([]); // placeholder — would need sessions per song
+              const daysSince = song.last_played_date
+                ? Math.floor((Date.parse(today) - Date.parse(song.last_played_date)) / 86400000)
+                : null;
               return (
-                <NavLink key={song.id} to={`/library?song=${song.id}`}>
+                <NavLink key={song.id} to={`/repertoire?song=${song.id}`}>
                   <Card classNames={{ base: 'bg-content2 border border-divider hover:border-primary/30 transition-colors cursor-pointer', body: 'p-3' }}>
                     <CardBody>
                       <div className="flex items-center gap-3">
@@ -174,11 +177,14 @@ export default function Home() {
                         </div>
                         <div className="text-right flex-shrink-0">
                           <div className="text-xs text-foreground-400">{song.session_count ?? 0} sessions</div>
-                          {song.avg_feeling != null && (
-                            <div className="text-lg mt-1">{feelingEmoji(Math.round(song.avg_feeling))}</div>
+                          {daysSince != null && (
+                            <div className={`text-[10px] mt-0.5 ${daysSince === 0 ? 'text-success' : daysSince >= 7 ? 'text-warning' : 'text-foreground-500'}`}>
+                              {daysSince === 0 ? 'Today' : `${daysSince}d ago`}
+                            </div>
                           )}
-                          {trend === 'up' && <div className="text-success text-xs">↑ improving</div>}
-                          {trend === 'down' && <div className="text-danger text-xs">↓ declining</div>}
+                          {song.avg_feeling != null && (
+                            <div className="text-base mt-1">{feelingEmoji(Math.round(song.avg_feeling))}</div>
+                          )}
                         </div>
                       </div>
                     </CardBody>
@@ -190,12 +196,53 @@ export default function Home() {
         )}
       </div>
 
+      {/* Needs Review nudge — Strava-style "you haven't done X in N days" */}
+      {needsReview.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-foreground-300 uppercase tracking-wide">🔔 Time to Revisit</h2>
+            <NavLink to="/repertoire" className="text-xs text-primary hover:text-primary/80 transition-colors">
+              View Repertoire →
+            </NavLink>
+          </div>
+          <div className="space-y-2">
+            {needsReview.map(song => {
+              const daysSince = Math.floor((Date.parse(today) - Date.parse(song.last_played_date!)) / 86400000);
+              return (
+                <NavLink key={song.id} to={`/repertoire?song=${song.id}`}>
+                  <Card classNames={{ base: 'bg-warning/5 border border-warning/20 hover:border-warning/40 transition-colors cursor-pointer', body: 'p-3' }}>
+                    <CardBody>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl overflow-hidden bg-content3 flex-shrink-0">
+                          {song.cover_url
+                            ? <Image src={song.cover_url} alt={song.title} className="w-10 h-10 object-cover" removeWrapper />
+                            : <div className="w-10 h-10 flex items-center justify-center text-xl">🎵</div>
+                          }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-foreground truncate">{song.title}</div>
+                          <div className="text-xs text-foreground-400">{song.artist ?? 'Unknown Artist'}</div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <div className="text-warning text-xs font-medium">{daysSince} days ago</div>
+                          <div className="text-foreground-500 text-[10px]">Don't forget me</div>
+                        </div>
+                      </div>
+                    </CardBody>
+                  </Card>
+                </NavLink>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Recent sessions */}
       {recentSessions.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-foreground-300 uppercase tracking-wide">Recent Sessions</h2>
-            <NavLink to="/history" className="text-xs text-primary hover:text-primary/80 transition-colors">
+            <NavLink to="/sessions" className="text-xs text-primary hover:text-primary/80 transition-colors">
               View All →
             </NavLink>
           </div>
