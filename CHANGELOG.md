@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.1.0...piano-tracker-v1.2.0) (2026-03-21)
+
+
+### Features
+
+* Phase 1 - MIDI capture, song management & redesigned History ([b0a834e](https://github.com/hmathieu31/piano-tracker/commit/b0a834e20c607e5cb7bb5b2099f13663e72332f8))
+
 ## [1.1.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.0.0...piano-tracker-v1.1.0) (2026-03-21)
 
 
