@@ -297,10 +297,15 @@ fn try_connect_once(session: SharedSession, client_id: u32) -> Result<(midir::Mi
             // is set by the debounce thread after the first note is played.
             let first = *s.midi_buffer_start.get_or_insert(now);
             let relative_ms = now.duration_since(first).as_millis() as i64;
+            // Normalize note-off velocity to 0 regardless of whether the
+            // keyboard sent 0x8x with release velocity or 0x90 vel=0.
+            // build_midi_file distinguishes note-on vs note-off by velocity==0,
+            // so a non-zero release velocity would be misread as a note-on.
+            let velocity = if is_note_off { 0 } else { if msg.len() > 2 { msg[2] } else { 0 } };
             s.midi_buffer.push(crate::db::MidiEventRecord {
                 relative_ms,
                 note: if msg.len() > 1 { msg[1] } else { 0 },
-                velocity: if msg.len() > 2 { msg[2] } else { 0 },
+                velocity,
                 channel: status & 0x0F,
             });
         }
