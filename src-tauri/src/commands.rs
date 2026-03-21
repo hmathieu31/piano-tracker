@@ -279,3 +279,15 @@ fn write_var_len(buf: &mut Vec<u8>, mut val: u32) {
         buf.push(b);
     }
 }
+
+// ── Dev / demo data ───────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn seed_dev_data(db: State<DbState>) -> Result<bool, String> {
+    db.seed_dev_data().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn clear_dev_data(db: State<DbState>) -> Result<(), String> {
+    db.clear_dev_data().map_err(|e| e.to_string())
+}

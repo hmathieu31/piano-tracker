@@ -780,6 +780,135 @@ impl Database {
         }
     }
 
+    // ── Dev seed data ────────────────────────────────────────────────────────
+
+    /// Insert realistic demo data for development. No-ops if already seeded.
+    /// Returns true if data was inserted, false if already present.
+    pub fn seed_dev_data(&self) -> Result<bool, rusqlite::Error> {
+        use chrono::{Utc, Duration as D};
+
+        let conn = self.conn.lock().unwrap();
+
+        let already: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM settings WHERE key = 'dev_seeded'",
+            [],
+            |row| row.get(0),
+        ).unwrap_or(false);
+        if already { return Ok(false); }
+
+        let now_ms = Utc::now().timestamp_millis();
+        let today = Utc::now().date_naive();
+
+        // ── Songs ──────────────────────────────────────────────────────────────
+        // (title, artist, genre, album, year, spotify_url, status)
+        let song_data: &[(&str, &str, &str, &str, i32, Option<&str>, &str)] = &[
+            ("Clair de Lune",           "Claude Debussy",       "Classical",    "Suite bergamasque",                      1905, Some("spotify:track:5HNH5HQhWiYd9uRpKhxZol"), "mastered"),
+            ("Nocturne Op. 9 No. 2",    "Frédéric Chopin",      "Classical",    "Nocturnes Op. 9",                        1832, Some("spotify:track:2ctvdKmETyYzPashp6Dbi5"), "practicing"),
+            ("River Flows in You",      "Yiruma",               "Contemporary", "First Love",                             2001, Some("spotify:track:4xdcNF3HGqWZUxMkEQ8O0e"), "practicing"),
+            ("Für Elise",               "Ludwig van Beethoven", "Classical",    "Bagatelles",                             1810, Some("spotify:track:3y5jFAEyPfJWVGBqyNYPMa"), "mastered"),
+            ("Comptine d'un autre été", "Yann Tiersen",         "Soundtrack",   "Le Fabuleux Destin d'Amélie Poulain",    2001, Some("spotify:track:1u8c2t2Cy7UBoG4ArRcF5g"), "learning"),
+            ("Gymnopédie No. 1",        "Erik Satie",           "Classical",    "Trois Gymnopédies",                      1888, Some("spotify:track:4Tr0CLtMiCLKy0yR7MzFMN"), "learning"),
+            ("The Entertainer",         "Scott Joplin",         "Ragtime",      "Piano Rags",                             1902, None,                                         "mastered"),
+        ];
+
+        let mut song_ids: Vec<i64> = Vec::new();
+        for (title, artist, genre, album, year, spotify_url, status) in song_data {
+            conn.execute(
+                "INSERT INTO songs (title, artist, genre, album, year, spotify_url, created_at, status)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![title, artist, genre, album, year, spotify_url, now_ms, status],
+            )?;
+            song_ids.push(conn.last_insert_rowid());
+        }
+
+        // ── Sessions ───────────────────────────────────────────────────────────
+        // (days_ago, hour, duration_min, song_idx, feeling: 1-5 or 0=unrated)
+        let sessions: &[(i64, u32, i64, usize, Option<i64>)] = &[
+            (88, 9,  20, 3, None),
+            (85, 10, 25, 3, Some(2)),
+            (82, 9,  30, 3, Some(3)),
+            (79, 11, 35, 3, Some(3)),
+            (76, 9,  40, 3, Some(4)),
+            (74, 10, 45, 0, None),
+            (72, 9,  30, 3, Some(4)),
+            (70, 21, 50, 0, Some(2)),
+            (67, 9,  35, 3, Some(4)),
+            (65, 10, 45, 0, Some(3)),
+            (63, 9,  60, 6, None),
+            (61, 10, 40, 0, Some(3)),
+            (59, 9,  55, 6, Some(4)),
+            (57, 11, 50, 0, Some(3)),
+            (55, 9,  45, 3, Some(5)),
+            (53, 10, 60, 6, Some(4)),
+            (51, 9,  70, 0, Some(4)),
+            (49, 10, 45, 6, Some(5)),
+            (47, 9,  55, 0, Some(4)),
+            (45, 14, 30, 1, None),
+            (43, 9,  65, 0, Some(4)),
+            (41, 10, 35, 1, Some(2)),
+            (39, 9,  60, 0, Some(5)),
+            (37, 10, 40, 1, Some(3)),
+            (35, 9,  50, 2, None),
+            (33, 11, 45, 1, Some(3)),
+            (31, 9,  55, 2, Some(3)),
+            (29, 10, 60, 1, Some(4)),
+            (27, 9,  50, 2, Some(4)),
+            (25, 10, 65, 0, Some(5)),
+            (23, 9,  45, 1, Some(4)),
+            (21, 10, 55, 2, Some(4)),
+            (19, 9,  60, 4, None),
+            (17, 10, 70, 1, Some(4)),
+            (15, 9,  50, 2, Some(4)),
+            (14, 10, 45, 4, Some(2)),
+            (13, 9,  60, 5, None),
+            (12, 10, 55, 1, Some(4)),
+            (11, 9,  65, 2, Some(5)),
+            (10, 10, 50, 4, Some(3)),
+            (9,  9,  45, 5, Some(3)),
+            (8,  10, 70, 1, Some(4)),
+            (7,  9,  60, 5, Some(3)),
+            (6,  10, 75, 2, Some(5)),
+            (5,  9,  55, 4, Some(3)),
+            (4,  10, 65, 5, Some(4)),
+            (3,  9,  80, 1, Some(5)),
+            (2,  10, 60, 2, Some(5)),
+            (1,  9,  70, 4, Some(3)),
+            (0,  10, 45, 5, Some(4)),
+        ];
+
+        for (days_ago, hour, duration_min, song_idx, feeling) in sessions {
+            let session_date = today - D::days(*days_ago);
+            let date_str = session_date.format("%Y-%m-%d").to_string();
+            let naive_dt = session_date.and_hms_opt(*hour, 30, 0).unwrap();
+            let start_ts = naive_dt.and_utc().timestamp_millis();
+            let duration_s = duration_min * 60;
+            let end_ts = start_ts + duration_s * 1000;
+            let song_id = song_ids[*song_idx];
+            let song_title: &str = song_data[*song_idx].0;
+
+            conn.execute(
+                "INSERT INTO sessions (date, start_ts, end_ts, duration_seconds, song_id, song_name, feeling)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![date_str, start_ts, end_ts, duration_s, song_id, song_title, feeling],
+            )?;
+        }
+
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('dev_seeded', 'true')", [])?;
+        Ok(true)
+    }
+
+    /// Wipe all sessions, songs and the seed flag — leaves settings otherwise intact.
+    pub fn clear_dev_data(&self) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute_batch("
+            DELETE FROM midi_events;
+            DELETE FROM sessions;
+            DELETE FROM songs;
+            DELETE FROM settings WHERE key = 'dev_seeded';
+        ")?;
+        Ok(())
+    }
+
     // ── MIDI events ──────────────────────────────────────────────────────────
 
     pub fn insert_midi_events(&self, session_id: i64, events: &[MidiEventRecord]) -> Result<(), rusqlite::Error> {

@@ -47,24 +47,29 @@ pub fn run() {
             start_midi_listener(app.handle().clone(), db.clone(), session.clone(), force_reconnect);
             notifications::start_notification_scheduler(app.handle().clone(), db.clone());
 
-            let open_item = MenuItemBuilder::new("Open Dashboard").id("open").build(app)?;
-            let quit_item = MenuItemBuilder::new("Quit").id("quit").build(app)?;
+            let open_item    = MenuItemBuilder::new("Open Dashboard").id("open").build(app)?;
+            let restart_item = MenuItemBuilder::new("Restart").id("restart").build(app)?;
+            let quit_item    = MenuItemBuilder::new("Quit").id("quit").build(app)?;
             let menu = MenuBuilder::new(app)
                 .item(&open_item)
                 .separator()
+                .item(&restart_item)
                 .item(&quit_item)
                 .build()?;
 
             let tray = TrayIconBuilder::new()
                 .menu(&menu)
                 .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("Piano Tracker — Not playing")
+                .tooltip("Ivory — Not playing")
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "open" => {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
+                    }
+                    "restart" => {
+                        app.restart();
                     }
                     "quit" => {
                         app.exit(0);
@@ -93,12 +98,12 @@ pub fn run() {
 
             let tray_handle = tray.clone();
             app.listen("session-started", move |_| {
-                let _ = tray_handle.set_tooltip(Some("Piano Tracker — 🎹 Playing..."));
+                let _ = tray_handle.set_tooltip(Some("Ivory — 🎹 Playing..."));
             });
 
             let tray_handle2 = tray;
             app.listen("session-ended", move |_| {
-                let _ = tray_handle2.set_tooltip(Some("Piano Tracker — Not playing"));
+                let _ = tray_handle2.set_tooltip(Some("Ivory — Not playing"));
             });
 
             Ok(())
@@ -141,6 +146,9 @@ pub fn run() {
             commands::set_song_status,
             commands::get_all_songs_with_stats,
             commands::get_song_with_sessions,
+            // Dev / demo data
+            commands::seed_dev_data,
+            commands::clear_dev_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -37,6 +37,64 @@ function Row({ label, description, children }: {
   );
 }
 
+// ── Dev-only seed panel (only rendered in development builds) ────────────────
+function DevSection() {
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const seed = async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const inserted = await invoke<boolean>('seed_dev_data');
+      setStatus(inserted ? '✓ Demo data seeded' : 'Already seeded — clear first to re-seed');
+    } catch (e) {
+      setStatus(`Error: ${e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clear = async () => {
+    if (!confirm('Delete ALL sessions, songs and MIDI events? This cannot be undone.')) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      await invoke('clear_dev_data');
+      setStatus('✓ All data cleared');
+    } catch (e) {
+      setStatus(`Error: ${e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-8 border border-dashed border-amber-500/40 rounded-xl p-4 bg-amber-500/5">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-amber-400 text-sm font-semibold">🛠 Dev Tools</span>
+        <Chip size="sm" variant="flat" classNames={{ base: 'bg-amber-500/15', content: 'text-amber-400 text-[10px]' }}>DEV ONLY</Chip>
+      </div>
+      <p className="text-xs text-foreground-500 mb-3">
+        Populate the database with 7 realistic songs and ~50 sessions spread over 3 months.
+      </p>
+      <div className="flex items-center gap-2">
+        <Button size="sm" color="warning" variant="flat" onPress={seed} isLoading={busy} className="text-amber-300">
+          Seed demo data
+        </Button>
+        <Button size="sm" color="danger" variant="flat" onPress={clear} isDisabled={busy}>
+          Clear all data
+        </Button>
+        {status && (
+          <span className={`text-xs ${status.startsWith('✓') ? 'text-emerald-400' : 'text-foreground-400'}`}>
+            {status}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { data: goalsData, refresh: refreshGoals } = useGoalsStatus();
   const { state: updaterState, checkForUpdates } = useUpdaterContext();
@@ -230,6 +288,8 @@ export default function Settings() {
         </Button>
         {saved && <Chip color="success" variant="flat" size="sm">✓ Saved</Chip>}
       </div>
+
+      {import.meta.env.DEV && <DevSection />}
     </div>
   );
 }
