@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Goals from './pages/Goals';
@@ -11,8 +11,7 @@ import Settings from './pages/Settings';
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
+    <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="goals" element={<Goals />} />
@@ -24,7 +23,6 @@ function App() {
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
-    </BrowserRouter>
   );
 }
 

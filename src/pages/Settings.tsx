@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
-import { Button, Switch, Card, CardBody, Divider, Slider, Chip } from '@heroui/react';
+import { Button, Switch, Card, CardBody, Slider, Chip } from '@heroui/react';
 import { useGoalsStatus } from '../hooks/useData';
 import { useUpdater } from '../hooks/useUpdater';
 
@@ -181,7 +181,6 @@ export default function Settings() {
             {version ? `v${version}` : '—'}
           </Chip>
         </Row>
-        <Divider />
         <Row label="Updates" description={
           updaterState.phase === 'available'
             ? `v${updaterState.update.version} is available`

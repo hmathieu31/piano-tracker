@@ -37,6 +37,7 @@ export default {
   },
   plugins: [
     heroui({
+      defaultTheme: "dark",
       themes: {
         dark: {
           colors: {
