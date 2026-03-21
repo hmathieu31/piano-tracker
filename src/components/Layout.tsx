@@ -4,6 +4,7 @@ import UpdateBanner from './UpdateBanner';
 import SessionToast from './SessionToast';
 import SessionTagModal from './SessionTagModal';
 import DevToolbar from './DevToolbar';
+import { AnimatePresence } from 'framer-motion';
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -91,21 +92,25 @@ export default function Layout() {
       )}
 
       {/* Modal — only opens after user clicks "Tag it" in the toast */}
-      {pendingSession && showModal && (
-        <SessionTagModal
-          sessionId={pendingSession.id}
-          durationSeconds={pendingSession.duration}
-          onClose={() => { setPendingSession(null); setShowModal(false); }}
-        />
-      )}
-      {devSuggestion && (
-        <SessionTagModal
-          sessionId={-1}
-          durationSeconds={0}
-          devSuggestion={devSuggestion}
-          onClose={() => setDevSuggestion(null)}
-        />
-      )}
+      <AnimatePresence>
+        {pendingSession && showModal && (
+          <SessionTagModal
+            key="tag-modal"
+            sessionId={pendingSession.id}
+            durationSeconds={pendingSession.duration}
+            onClose={() => { setPendingSession(null); setShowModal(false); }}
+          />
+        )}
+        {devSuggestion && (
+          <SessionTagModal
+            key="dev-modal"
+            sessionId={-1}
+            durationSeconds={0}
+            devSuggestion={devSuggestion}
+            onClose={() => setDevSuggestion(null)}
+          />
+        )}
+      </AnimatePresence>
       {import.meta.env.DEV && (
         <DevToolbar onSimulateSuggest={s => setDevSuggestion(s)} />
       )}

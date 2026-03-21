@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Modal, ModalContent, ModalBody, Button, Textarea, Image, Chip } from '@heroui/react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Button, Textarea, Image, Chip } from '@heroui/react';
 import { searchRecordings, type MBSearchResult } from '../api/musicSearch';
 import type { SongRecord, MasterySuggestion } from '../types';
 import confetti from 'canvas-confetti';
@@ -318,19 +319,26 @@ export default function SessionTagModal({ sessionId, durationSeconds, onClose, d
   const altTypes = sortedPracticeTypes.slice(1);
 
   return (
-    <Modal
-      isOpen
-      onClose={onClose}
-      size="md"
-      isDismissable={step === 'song'}
-      classNames={{
-        backdrop: 'bg-black/75',
-        base: 'bg-[#16161d] border border-white/8 shadow-2xl',
-        body: 'p-0',
-      }}
-    >
-      <ModalContent>
-        <ModalBody>
+    <>
+      {/* Backdrop */}
+      <motion.div
+        className="fixed inset-0 bg-black/70 z-50"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        onClick={step === 'song' ? onClose : undefined}
+      />
+
+      {/* Card */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+        <motion.div
+          className="bg-[#16161d] border border-white/8 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden pointer-events-auto"
+          initial={{ opacity: 0, scale: 0.96, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.97, y: 12 }}
+          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+        >
           {/* ── Header ── */}
           <div className="px-5 pt-5 pb-4 border-b border-white/5">
             <div className="flex items-center justify-between">
@@ -339,12 +347,21 @@ export default function SessionTagModal({ sessionId, durationSeconds, onClose, d
                   <span className="text-lg">🎹</span>
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-white">
-                    {step === 'song' && 'Great session!'}
-                    {step === 'details' && 'How did it go?'}
-                    {step === 'suggest' && 'Level up? 🎉'}
-                    {step === 'done' && (celebrating ? '🎉 Level up!' : '✓ Session saved!')}
-                  </div>
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={step + (celebrating ? '-celebrate' : '')}
+                      className="text-sm font-semibold text-white"
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {step === 'song' && 'Great session!'}
+                      {step === 'details' && 'How did it go?'}
+                      {step === 'suggest' && 'Level up? 🎉'}
+                      {step === 'done' && (celebrating ? '🎉 Level up!' : 'Session saved!')}
+                    </motion.div>
+                  </AnimatePresence>
                   <div className="text-xs text-slate-500">
                     {durationSeconds > 0 ? `${durationLabel} of practice` : 'Practice session'}
                   </div>
@@ -358,6 +375,16 @@ export default function SessionTagModal({ sessionId, durationSeconds, onClose, d
               </div>
             )}
           </div>
+
+          {/* ── Step content (animated) ── */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+            >
 
           {/* ── Step: Song picker ── */}
           {step === 'song' && (
@@ -603,29 +630,88 @@ export default function SessionTagModal({ sessionId, durationSeconds, onClose, d
 
           {/* ── Step: Done / celebration ── */}
           {step === 'done' && (
-            <div className="px-5 py-8 text-center space-y-3">
+            <div className="px-5 py-10 text-center space-y-4">
               {celebrating ? (
                 <>
-                  <div className="text-5xl animate-bounce">🎉</div>
-                  <div className="text-base font-semibold text-white">
-                    {suggestion?.song_title} levelled up to{' '}
-                    <span className={STAGE_COLORS[suggestion?.suggested_status ?? 'learning']}>
-                      {STAGE_LABELS[suggestion?.suggested_status ?? 'learning']}
-                    </span>!
-                  </div>
-                  <p className="text-sm text-slate-400">Keep up the amazing work 🎹</p>
+                  <motion.div
+                    className="text-5xl mx-auto"
+                    initial={{ scale: 0, rotate: -20 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ type: 'spring', stiffness: 260, damping: 16 }}
+                  >🎉</motion.div>
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15 }}
+                  >
+                    <div className="text-base font-semibold text-white">
+                      {suggestion?.song_title} levelled up to{' '}
+                      <span className={STAGE_COLORS[suggestion?.suggested_status ?? 'learning']}>
+                        {STAGE_LABELS[suggestion?.suggested_status ?? 'learning']}
+                      </span>!
+                    </div>
+                    <p className="text-sm text-slate-400 mt-1">Keep up the amazing work 🎹</p>
+                  </motion.div>
                 </>
               ) : (
                 <>
-                  <div className="text-4xl">✓</div>
-                  <div className="text-sm text-slate-300">Session saved!</div>
+                  <AnimatedCheck />
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.55 }}
+                    className="text-sm text-slate-300"
+                  >
+                    Session saved!
+                  </motion.div>
                 </>
               )}
             </div>
           )}
-        </ModalBody>
-      </ModalContent>
-    </Modal>
+
+            </motion.div>
+          </AnimatePresence>
+
+        </motion.div>
+      </div>
+    </>
+  );
+}
+
+// ── Animated SVG checkmark ─────────────────────────────────────────────────
+
+function AnimatedCheck() {
+  return (
+    <div className="w-16 h-16 mx-auto">
+      <svg viewBox="0 0 64 64" className="w-full h-full" fill="none">
+        {/* Track ring */}
+        <circle cx="32" cy="32" r="26" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
+        {/* Animated ring */}
+        <motion.circle
+          cx="32" cy="32" r="26"
+          stroke="#0ea5e9"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray="163.4"
+          initial={{ strokeDashoffset: 163.4, rotate: -90 }}
+          animate={{ strokeDashoffset: 0 }}
+          style={{ originX: '32px', originY: '32px', rotate: '-90deg' }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+        />
+        {/* Checkmark */}
+        <motion.polyline
+          points="20,33 28,41 44,25"
+          stroke="#0ea5e9"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray="34"
+          initial={{ strokeDashoffset: 34 }}
+          animate={{ strokeDashoffset: 0 }}
+          transition={{ duration: 0.25, ease: 'easeOut', delay: 0.4 }}
+        />
+      </svg>
+    </div>
   );
 }
 
@@ -639,4 +725,3 @@ function fireConfetti() {
   };
   frame();
 }
-
