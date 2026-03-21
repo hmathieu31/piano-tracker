@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.5](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.4...piano-tracker-v0.3.5) (2026-03-21)
+
+
+### Bug Fixes
+
+* add updater artifacts ([1c62ad5](https://github.com/hmathieu31/piano-tracker/commit/1c62ad5ef521d619ed660b06226a63eee58c9468))
+
 ## [0.3.4](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.3...piano-tracker-v0.3.4) (2026-03-20)
 
 
