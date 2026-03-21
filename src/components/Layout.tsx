@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useSessionStatus } from '../hooks/useData';
 import UpdateBanner from './UpdateBanner';
+import QuickAssociateBanner from './QuickAssociateBanner';
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { useState, useEffect, useCallback } from 'react';
@@ -30,6 +31,7 @@ export default function Layout() {
   return (
     <div className="flex h-screen bg-[#0f0f13] text-slate-100 overflow-hidden">
       <UpdateBanner />
+      <QuickAssociateBanner />
       <aside className="w-52 flex-shrink-0 bg-[#16161d] border-r border-white/5 flex flex-col">
         {/* Logo */}
         <div className="p-5 pb-4">

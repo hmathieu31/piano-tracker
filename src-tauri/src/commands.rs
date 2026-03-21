@@ -1,6 +1,7 @@
 use tauri::State;
 use std::sync::Arc;
-use crate::db::{Database, SessionRecord, DailyTotal, GoalsConfig, StreakInfo, InsightsData, GoalsStatus, AchievementInfo};
+use crate::db::{Database, SessionRecord, DailyTotal, GoalsConfig, StreakInfo, InsightsData,
+                GoalsStatus, AchievementInfo, SongRecord, MidiEventRecord};
 use crate::session::{SharedSession, SessionStatus, get_status};
 
 pub type DbState = Arc<Database>;
@@ -68,4 +69,142 @@ pub fn set_setting(db: State<DbState>, key: String, value: String) -> Result<(),
 #[tauri::command]
 pub fn reconnect_midi(force_reconnect: State<crate::session::ForceReconnect>) {
     force_reconnect.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+// ── Song management commands ─────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn create_song(
+    db: State<DbState>,
+    title: String,
+    artist: Option<String>,
+    genre: Option<String>,
+    album: Option<String>,
+    year: Option<i32>,
+    cover_url: Option<String>,
+    spotify_url: Option<String>,
+    mb_recording_id: Option<String>,
+    mb_release_id: Option<String>,
+) -> Result<i64, String> {
+    db.create_song(
+        &title,
+        artist.as_deref(),
+        genre.as_deref(),
+        album.as_deref(),
+        year,
+        cover_url.as_deref(),
+        spotify_url.as_deref(),
+        mb_recording_id.as_deref(),
+        mb_release_id.as_deref(),
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_song_genre(db: State<DbState>, song_id: i64, genre: String) -> Result<(), String> {
+    db.update_song_genre(song_id, &genre).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_songs(db: State<DbState>) -> Result<Vec<SongRecord>, String> {
+    db.get_songs().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_song_stats(db: State<DbState>) -> Result<Vec<SongRecord>, String> {
+    db.get_song_stats().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_recent_songs(db: State<DbState>, limit: i32) -> Result<Vec<SongRecord>, String> {
+    db.get_recent_songs(limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn link_session_song(db: State<DbState>, session_id: i64, song_id: i64) -> Result<(), String> {
+    db.link_session_song(session_id, song_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn unlink_session_song(db: State<DbState>, session_id: i64) -> Result<(), String> {
+    db.unlink_session_song(session_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_sessions_for_song(db: State<DbState>, song_id: i64) -> Result<Vec<SessionRecord>, String> {
+    db.get_sessions_for_song(song_id).map_err(|e| e.to_string())
+}
+
+// ── MIDI event commands ──────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_midi_events(db: State<DbState>, session_id: i64) -> Result<Vec<MidiEventRecord>, String> {
+    db.get_midi_events(session_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn export_midi_file(db: State<DbState>, session_id: i64) -> Result<Vec<u8>, String> {
+    let events = db.get_midi_events(session_id).map_err(|e| e.to_string())?;
+    Ok(build_midi_file(&events))
+}
+
+fn build_midi_file(events: &[MidiEventRecord]) -> Vec<u8> {
+    let ticks_per_beat: u16 = 480;
+    let tempo_us: u32 = 500_000; // 120 BPM
+    let ms_per_tick = tempo_us as f64 / 1000.0 / ticks_per_beat as f64;
+
+    let mut track: Vec<u8> = Vec::new();
+
+    // Tempo meta event at tick 0: delta=0, FF 51 03 <3-byte tempo>
+    write_var_len(&mut track, 0);
+    track.extend_from_slice(&[0xFF, 0x51, 0x03]);
+    track.push(((tempo_us >> 16) & 0xFF) as u8);
+    track.push(((tempo_us >> 8) & 0xFF) as u8);
+    track.push((tempo_us & 0xFF) as u8);
+
+    let mut last_tick: u32 = 0;
+    for ev in events {
+        let abs_tick = (ev.relative_ms as f64 / ms_per_tick).round() as u32;
+        let delta = abs_tick.saturating_sub(last_tick);
+        last_tick = abs_tick;
+
+        write_var_len(&mut track, delta);
+        let status_byte = if ev.velocity > 0 {
+            0x90 | (ev.channel & 0x0F)
+        } else {
+            0x80 | (ev.channel & 0x0F)
+        };
+        track.extend_from_slice(&[status_byte, ev.note, ev.velocity]);
+    }
+
+    // End of track: delta=0, FF 2F 00
+    write_var_len(&mut track, 0);
+    track.extend_from_slice(&[0xFF, 0x2F, 0x00]);
+
+    let mut out: Vec<u8> = Vec::new();
+    // MIDI header chunk
+    out.extend_from_slice(b"MThd");
+    out.extend_from_slice(&6u32.to_be_bytes());
+    out.extend_from_slice(&0u16.to_be_bytes()); // format 0
+    out.extend_from_slice(&1u16.to_be_bytes()); // 1 track
+    out.extend_from_slice(&ticks_per_beat.to_be_bytes());
+    // Track chunk
+    out.extend_from_slice(b"MTrk");
+    out.extend_from_slice(&(track.len() as u32).to_be_bytes());
+    out.extend_from_slice(&track);
+    out
+}
+
+fn write_var_len(buf: &mut Vec<u8>, mut val: u32) {
+    let mut bytes = [0u8; 4];
+    let mut count = 0;
+    loop {
+        bytes[count] = (val & 0x7F) as u8;
+        count += 1;
+        val >>= 7;
+        if val == 0 { break; }
+    }
+    for i in (0..count).rev() {
+        let b = if i > 0 { bytes[i] | 0x80 } else { bytes[i] };
+        buf.push(b);
+    }
 }

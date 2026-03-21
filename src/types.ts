@@ -1,3 +1,30 @@
+export interface SongRecord {
+  id: number;
+  title: string;
+  artist: string | null;
+  genre: string | null;
+  album: string | null;
+  year: number | null;
+  cover_url: string | null;
+  spotify_url: string | null;
+  musicbrainz_recording_id: string | null;
+  musicbrainz_release_id: string | null;
+  created_at: number;
+  // populated by get_song_stats
+  total_seconds?: number;
+  session_count?: number;
+  last_played_date?: string | null;
+}
+
+export interface MidiEventRecord {
+  id: number;
+  session_id: number;
+  relative_ms: number;
+  note: number;
+  velocity: number;
+  channel: number;
+}
+
 export interface SessionRecord {
   id: number;
   date: string;
@@ -5,6 +32,9 @@ export interface SessionRecord {
   end_ts: number;
   duration_seconds: number;
   note: string | null;
+  song_id: number | null;
+  song_name: string | null;
+  song: SongRecord | null;
 }
 
 export interface DailyTotal {

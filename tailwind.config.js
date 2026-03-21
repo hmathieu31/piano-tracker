@@ -25,6 +25,15 @@ export default {
           400: '#3a3a50',
         }
       },
+      animation: {
+        'slide-up': 'slideUp 0.3s ease-out',
+      },
+      keyframes: {
+        slideUp: {
+          '0%': { transform: 'translateX(-50%) translateY(100%)', opacity: '0' },
+          '100%': { transform: 'translateX(-50%) translateY(0)', opacity: '1' },
+        },
+      },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],

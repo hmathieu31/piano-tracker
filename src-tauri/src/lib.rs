@@ -34,6 +34,7 @@ pub fn run() {
                 last_midi_instant: None,
                 midi_port_name: None,
                 midi_connected: false,
+                midi_buffer: Vec::new(),
             }));
 
             app.manage(db.clone() as DbState);
@@ -121,6 +122,18 @@ pub fn run() {
             commands::get_setting,
             commands::set_setting,
             commands::reconnect_midi,
+            // Song management
+            commands::create_song,
+            commands::update_song_genre,
+            commands::get_songs,
+            commands::get_song_stats,
+            commands::get_recent_songs,
+            commands::link_session_song,
+            commands::unlink_session_song,
+            commands::get_sessions_for_song,
+            // MIDI events
+            commands::get_midi_events,
+            commands::export_midi_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -14,6 +14,7 @@ pub struct SessionInner {
     pub last_midi_instant: Option<Instant>,
     pub midi_port_name: Option<String>,
     pub midi_connected: bool,
+    pub midi_buffer: Vec<crate::db::MidiEventRecord>,
 }
 
 pub type SharedSession = Arc<Mutex<SessionInner>>;
@@ -110,7 +111,7 @@ pub fn start_midi_listener(
         loop {
             thread::sleep(Duration::from_millis(500));
 
-            let (should_start, should_end, start_ts_to_save) = {
+            let (should_start, should_end, start_ts_to_save, events_to_save) = {
                 let mut s = session_for_debounce.lock().unwrap();
                 let should_start = !s.is_active
                     && s.last_midi_instant.is_some()
@@ -123,16 +124,24 @@ pub fn start_midi_listener(
                 if should_start {
                     s.is_active = true;
                     s.start_ts = Some(now_ms());
+                    s.midi_buffer.clear(); // fresh buffer for new session
                 }
 
                 let start_ts_to_save = if should_end { s.start_ts } else { None };
+                let events_to_save = if should_end {
+                    let ev = s.midi_buffer.clone();
+                    s.midi_buffer.clear();
+                    ev
+                } else {
+                    Vec::new()
+                };
                 if should_end {
                     s.is_active = false;
                     s.start_ts = None;
                     s.last_midi_instant = None;
                 }
 
-                (should_start, should_end, start_ts_to_save)
+                (should_start, should_end, start_ts_to_save, events_to_save)
             };
 
             if should_start {
@@ -149,6 +158,10 @@ pub fn start_midi_listener(
                         if let Ok(session_id) = db_debounce.insert_session(
                             &date, start_ts, end_ts, duration_seconds
                         ) {
+                            // Flush buffered MIDI events for this session
+                            if !events_to_save.is_empty() {
+                                let _ = db_debounce.insert_midi_events(session_id, &events_to_save);
+                            }
                             if let Ok(sessions) = db_debounce.get_sessions(1) {
                                 if let Some(session_record) = sessions.first() {
                                     if let Ok(new_achievements) = db_debounce.check_and_unlock_achievements(session_record) {
@@ -206,12 +219,24 @@ fn try_connect_midi(session: SharedSession, attempt: u32) -> Result<(midir::Midi
     let conn = midi_in.connect(port, "piano-tracker-input", move |_ts, msg, _| {
         if msg.is_empty() { return; }
         let status = msg[0];
-        // Only note-on (0x90–0x9F) with velocity > 0 starts/extends a session.
-        // Active Sensing (0xFE), MIDI Clock (0xF8), note-off, CC etc. are ignored.
-        let is_note_on = (status & 0xF0) == 0x90 && msg.len() >= 3 && msg[2] > 0;
-        if is_note_on {
+        // note-on (0x90–0x9F) with velocity > 0
+        let is_note_on  = (status & 0xF0) == 0x90 && msg.len() >= 3 && msg[2] > 0;
+        // note-off (0x80–0x8F) or note-on with velocity 0
+        let is_note_off = ((status & 0xF0) == 0x80 && msg.len() >= 3)
+                       || ((status & 0xF0) == 0x90 && msg.len() >= 3 && msg[2] == 0);
+
+        if is_note_on || is_note_off {
             let mut s = session_cb.lock().unwrap();
-            s.last_midi_instant = Some(Instant::now());
+            if is_note_on {
+                s.last_midi_instant = Some(Instant::now());
+            }
+            let relative_ms = s.start_ts.map(|st| now_ms() - st).unwrap_or(0);
+            s.midi_buffer.push(crate::db::MidiEventRecord {
+                relative_ms,
+                note: if msg.len() > 1 { msg[1] } else { 0 },
+                velocity: if msg.len() > 2 { msg[2] } else { 0 },
+                channel: status & 0x0F,
+            });
         }
     }, ())?;
 

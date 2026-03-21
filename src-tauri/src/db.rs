@@ -3,6 +3,33 @@ use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SongRecord {
+    pub id: i64,
+    pub title: String,
+    pub artist: Option<String>,
+    pub genre: Option<String>,
+    pub album: Option<String>,
+    pub year: Option<i32>,
+    pub cover_url: Option<String>,
+    pub spotify_url: Option<String>,
+    pub musicbrainz_recording_id: Option<String>,
+    pub musicbrainz_release_id: Option<String>,
+    pub created_at: i64,
+    // Aggregated stats — populated by get_song_stats / get_recent_songs, None otherwise
+    pub total_seconds: Option<i64>,
+    pub session_count: Option<i32>,
+    pub last_played_date: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MidiEventRecord {
+    pub relative_ms: i64,
+    pub note: u8,
+    pub velocity: u8,
+    pub channel: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionRecord {
     pub id: i64,
     pub date: String,
@@ -10,6 +37,9 @@ pub struct SessionRecord {
     pub end_ts: i64,
     pub duration_seconds: i64,
     pub note: Option<String>,
+    pub song_id: Option<i64>,
+    pub song_name: Option<String>,
+    pub song: Option<SongRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,8 +131,34 @@ impl Database {
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS songs (
+                id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+                title                      TEXT NOT NULL,
+                artist                     TEXT,
+                genre                      TEXT,
+                album                      TEXT,
+                year                       INTEGER,
+                cover_url                  TEXT,
+                spotify_url                TEXT,
+                musicbrainz_recording_id   TEXT,
+                musicbrainz_release_id     TEXT,
+                created_at                 INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_songs_title ON songs(title);
+            CREATE TABLE IF NOT EXISTS midi_events (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id  INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                relative_ms INTEGER NOT NULL,
+                note        INTEGER NOT NULL,
+                velocity    INTEGER NOT NULL,
+                channel     INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_midi_events_session ON midi_events(session_id);
             INSERT OR IGNORE INTO goals (goal_type, target_minutes) VALUES ('daily', 30);
         ")?;
+        // Migrate existing sessions table to add song columns if not present
+        let _ = conn.execute("ALTER TABLE sessions ADD COLUMN song_id INTEGER REFERENCES songs(id)", []);
+        let _ = conn.execute("ALTER TABLE sessions ADD COLUMN song_name TEXT", []);
         Ok(())
     }
 
@@ -121,21 +177,72 @@ impl Database {
         Ok(())
     }
 
+    fn row_to_session(row: &rusqlite::Row) -> rusqlite::Result<SessionRecord> {
+        let song_id: Option<i64> = row.get(6)?;
+        let song = if let Some(id) = song_id {
+            let sg_title: Option<String> = row.get(9)?;
+            sg_title.map(|title| SongRecord {
+                id,
+                title,
+                artist: row.get(10).ok().flatten(),
+                genre: row.get(11).ok().flatten(),
+                album: row.get(12).ok().flatten(),
+                year: row.get(13).ok().flatten(),
+                cover_url: row.get(14).ok().flatten(),
+                spotify_url: row.get(15).ok().flatten(),
+                musicbrainz_recording_id: row.get(16).ok().flatten(),
+                musicbrainz_release_id: row.get(17).ok().flatten(),
+                created_at: row.get(18).unwrap_or(0),
+                total_seconds: None,
+                session_count: None,
+                last_played_date: None,
+            })
+        } else {
+            None
+        };
+        Ok(SessionRecord {
+            id: row.get(0)?,
+            date: row.get(1)?,
+            start_ts: row.get(2)?,
+            end_ts: row.get(3)?,
+            duration_seconds: row.get(4)?,
+            note: row.get(5)?,
+            song_id: row.get(6)?,
+            song_name: row.get(7)?,
+            song,
+        })
+    }
+
     pub fn get_sessions(&self, limit: i32) -> Result<Vec<SessionRecord>, rusqlite::Error> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, date, start_ts, end_ts, duration_seconds, note FROM sessions ORDER BY start_ts DESC LIMIT ?1"
+            "SELECT s.id, s.date, s.start_ts, s.end_ts, s.duration_seconds, s.note,
+                    s.song_id, s.song_name,
+                    sg.id, sg.title, sg.artist, sg.genre, sg.album, sg.year,
+                    sg.cover_url, sg.spotify_url, sg.musicbrainz_recording_id,
+                    sg.musicbrainz_release_id, sg.created_at
+             FROM sessions s
+             LEFT JOIN songs sg ON s.song_id = sg.id
+             ORDER BY s.start_ts DESC LIMIT ?1"
         )?;
-        let rows = stmt.query_map(params![limit], |row| {
-            Ok(SessionRecord {
-                id: row.get(0)?,
-                date: row.get(1)?,
-                start_ts: row.get(2)?,
-                end_ts: row.get(3)?,
-                duration_seconds: row.get(4)?,
-                note: row.get(5)?,
-            })
-        })?;
+        let rows = stmt.query_map(params![limit], Self::row_to_session)?;
+        rows.collect()
+    }
+
+    pub fn get_sessions_for_song(&self, song_id: i64) -> Result<Vec<SessionRecord>, rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT s.id, s.date, s.start_ts, s.end_ts, s.duration_seconds, s.note,
+                    s.song_id, s.song_name,
+                    sg.id, sg.title, sg.artist, sg.genre, sg.album, sg.year,
+                    sg.cover_url, sg.spotify_url, sg.musicbrainz_recording_id,
+                    sg.musicbrainz_release_id, sg.created_at
+             FROM sessions s
+             LEFT JOIN songs sg ON s.song_id = sg.id
+             WHERE s.song_id = ?1
+             ORDER BY s.start_ts DESC"
+        )?;
+        let rows = stmt.query_map(params![song_id], Self::row_to_session)?;
         rows.collect()
     }
 
@@ -487,5 +594,158 @@ impl Database {
             params![key, value],
         )?;
         Ok(())
+    }
+
+    // ── Song management ─────────────────────────────────────────────────────
+
+    pub fn create_song(
+        &self,
+        title: &str,
+        artist: Option<&str>,
+        genre: Option<&str>,
+        album: Option<&str>,
+        year: Option<i32>,
+        cover_url: Option<&str>,
+        spotify_url: Option<&str>,
+        mb_recording_id: Option<&str>,
+        mb_release_id: Option<&str>,
+    ) -> Result<i64, rusqlite::Error> {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO songs (title, artist, genre, album, year, cover_url, spotify_url,
+                               musicbrainz_recording_id, musicbrainz_release_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![title, artist, genre, album, year, cover_url, spotify_url,
+                    mb_recording_id, mb_release_id, now],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn update_song_genre(&self, song_id: i64, genre: &str) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE songs SET genre = ?1 WHERE id = ?2", params![genre, song_id])?;
+        Ok(())
+    }
+
+    fn row_to_song_stats(row: &rusqlite::Row) -> rusqlite::Result<SongRecord> {
+        Ok(SongRecord {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            artist: row.get(2)?,
+            genre: row.get(3)?,
+            album: row.get(4)?,
+            year: row.get(5)?,
+            cover_url: row.get(6)?,
+            spotify_url: row.get(7)?,
+            musicbrainz_recording_id: row.get(8)?,
+            musicbrainz_release_id: row.get(9)?,
+            created_at: row.get(10)?,
+            total_seconds: row.get(11).ok(),
+            session_count: row.get(12).ok(),
+            last_played_date: row.get(13).ok().flatten(),
+        })
+    }
+
+    pub fn get_songs(&self) -> Result<Vec<SongRecord>, rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, title, artist, genre, album, year, cover_url, spotify_url,
+                    musicbrainz_recording_id, musicbrainz_release_id, created_at,
+                    NULL, NULL, NULL
+             FROM songs ORDER BY title ASC"
+        )?;
+        let rows = stmt.query_map([], Self::row_to_song_stats)?;
+        rows.collect()
+    }
+
+    pub fn get_song_stats(&self) -> Result<Vec<SongRecord>, rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT sg.id, sg.title, sg.artist, sg.genre, sg.album, sg.year,
+                    sg.cover_url, sg.spotify_url,
+                    sg.musicbrainz_recording_id, sg.musicbrainz_release_id, sg.created_at,
+                    COALESCE(SUM(s.duration_seconds), 0) as total_seconds,
+                    COUNT(s.id) as session_count,
+                    MAX(s.date) as last_played_date
+             FROM songs sg
+             LEFT JOIN sessions s ON s.song_id = sg.id
+             GROUP BY sg.id
+             ORDER BY total_seconds DESC"
+        )?;
+        let rows = stmt.query_map([], Self::row_to_song_stats)?;
+        rows.collect()
+    }
+
+    pub fn get_recent_songs(&self, limit: i32) -> Result<Vec<SongRecord>, rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT sg.id, sg.title, sg.artist, sg.genre, sg.album, sg.year,
+                    sg.cover_url, sg.spotify_url,
+                    sg.musicbrainz_recording_id, sg.musicbrainz_release_id, sg.created_at,
+                    COALESCE(SUM(s.duration_seconds), 0) as total_seconds,
+                    COUNT(s.id) as session_count,
+                    MAX(s.date) as last_played_date
+             FROM songs sg
+             INNER JOIN sessions s ON s.song_id = sg.id
+             GROUP BY sg.id
+             ORDER BY MAX(s.start_ts) DESC
+             LIMIT ?1"
+        )?;
+        let rows = stmt.query_map(params![limit], Self::row_to_song_stats)?;
+        rows.collect()
+    }
+
+    // ── Session-Song linking ─────────────────────────────────────────────────
+
+    pub fn link_session_song(&self, session_id: i64, song_id: i64) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET song_id = ?1 WHERE id = ?2",
+            params![song_id, session_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn unlink_session_song(&self, session_id: i64) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE sessions SET song_id = NULL WHERE id = ?1", params![session_id])?;
+        Ok(())
+    }
+
+    // ── MIDI events ──────────────────────────────────────────────────────────
+
+    pub fn insert_midi_events(&self, session_id: i64, events: &[MidiEventRecord]) -> Result<(), rusqlite::Error> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO midi_events (session_id, relative_ms, note, velocity, channel)
+                 VALUES (?1, ?2, ?3, ?4, ?5)"
+            )?;
+            for e in events {
+                stmt.execute(params![session_id, e.relative_ms,
+                                     e.note as i32, e.velocity as i32, e.channel as i32])?;
+            }
+        }
+        tx.commit()
+    }
+
+    pub fn get_midi_events(&self, session_id: i64) -> Result<Vec<MidiEventRecord>, rusqlite::Error> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT relative_ms, note, velocity, channel FROM midi_events
+             WHERE session_id = ?1 ORDER BY relative_ms ASC"
+        )?;
+        let rows = stmt.query_map(params![session_id], |row| {
+            Ok(MidiEventRecord {
+                relative_ms: row.get(0)?,
+                note: row.get::<_, i32>(1)? as u8,
+                velocity: row.get::<_, i32>(2)? as u8,
+                channel: row.get::<_, i32>(3)? as u8,
+            })
+        })?;
+        rows.collect()
     }
 }
