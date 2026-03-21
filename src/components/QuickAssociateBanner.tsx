@@ -49,7 +49,7 @@ export default function QuickAssociateBanner() {
         />
       )}
 
-      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 w-full max-w-xl px-4 animate-slide-up">
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-xl animate-slide-up">
         <div className="bg-[#1a1a28] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
           {assigned ? (
             <div className="flex items-center gap-3 px-4 py-3">

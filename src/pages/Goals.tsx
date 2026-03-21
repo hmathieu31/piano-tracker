@@ -47,7 +47,7 @@ export default function Goals() {
   const dailyGoal = data?.config.daily_minutes ?? 30;
 
   return (
-    <div className="p-8 fade-in">
+    <div className="p-4 md:p-6 lg:p-8 fade-in">
       <div className="flex items-start justify-between mb-8">
         <div>
           <h1 className="text-2xl font-semibold text-white">Goals</h1>

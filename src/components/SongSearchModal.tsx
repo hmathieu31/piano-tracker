@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { searchRecordings, fetchRecordingGenre, type MBSearchResult } from '../api/musicSearch';
+import { searchRecordings, type MBSearchResult } from '../api/musicSearch';
 import type { SongRecord } from '../types';
 
 interface Props {
@@ -45,7 +45,8 @@ export default function SongSearchModal({ sessionId, recentSongs, onAssigned, on
   const assignFromSearch = async (result: MBSearchResult) => {
     setSaving(true);
     try {
-      const genre = result.recordingId ? await fetchRecordingGenre(result.recordingId) : null;
+      // iTunes already returns genre — no extra fetch needed
+      const genre = result.genre;
       const songId = await invoke<number>('create_song', {
         title: result.title,
         artist: result.artist,
@@ -102,7 +103,7 @@ export default function SongSearchModal({ sessionId, recentSongs, onAssigned, on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={onClose}>
       <div
-        className="bg-[#1a1a24] border border-white/10 rounded-2xl w-full max-w-lg mx-4 shadow-2xl overflow-hidden"
+        className="bg-[#1a1a24] border border-white/10 rounded-2xl w-full max-w-lg mx-4 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

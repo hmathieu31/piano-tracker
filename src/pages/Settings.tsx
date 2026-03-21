@@ -142,7 +142,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="p-8 fade-in max-w-xl">
+    <div className="p-4 md:p-6 lg:p-8 fade-in max-w-xl">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-white">Settings</h1>
         <p className="text-slate-500 text-sm mt-1">Configure your goal, notifications, and tracking</p>

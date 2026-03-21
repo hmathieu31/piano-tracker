@@ -47,7 +47,7 @@ export default function Achievements() {
   const locked = achievements.filter(a => a.unlocked_at === null);
 
   return (
-    <div className="p-8 fade-in">
+    <div className="p-4 md:p-6 lg:p-8 fade-in">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-white">Achievements</h1>
         <p className="text-slate-500 text-sm mt-1">

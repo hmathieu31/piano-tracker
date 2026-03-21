@@ -15,8 +15,8 @@
         "title": "Piano Tracker",
         "width": 1100,
         "height": 700,
-        "minWidth": 800,
-        "minHeight": 550,
+        "minWidth": 900,
+        "minHeight": 580,
         "decorations": true,
         "resizable": true
       }

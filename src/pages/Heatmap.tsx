@@ -58,7 +58,7 @@ export default function Heatmap() {
   const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   return (
-    <div className="p-8 fade-in">
+    <div className="p-4 md:p-6 lg:p-8 fade-in">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-white">Heatmap</h1>
         <p className="text-slate-500 text-sm mt-1">Your practice activity over the past year</p>

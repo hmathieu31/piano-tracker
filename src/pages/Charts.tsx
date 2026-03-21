@@ -39,7 +39,7 @@ export default function Charts() {
   }
 
   return (
-    <div className="p-8 fade-in">
+    <div className="p-4 md:p-6 lg:p-8 fade-in">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-semibold text-white">Charts</h1>

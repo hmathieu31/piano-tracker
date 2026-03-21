@@ -65,9 +65,9 @@ function SessionDetailPanel({
   const durationMs = (session.end_ts - session.start_ts);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={onClose}>
       <div
-        className="bg-[#16161d] border border-white/8 rounded-t-2xl w-full max-w-3xl max-h-[85vh] overflow-y-auto shadow-2xl"
+        className="bg-[#16161d] border border-white/8 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {showSongModal && (
@@ -473,7 +473,7 @@ export default function History() {
   const months = Object.keys(grouped).sort().reverse();
 
   return (
-    <div className="p-8 fade-in">
+    <div className="p-4 md:p-6 lg:p-8 fade-in">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-white">History</h1>
@@ -482,13 +482,13 @@ export default function History() {
         </p>
       </div>
 
-      {/* Tab Bar */}
-      <div className="flex gap-1 bg-[#1e1e28] rounded-xl p-1 mb-6 border border-white/5">
+      {/* Tab Bar — scrollable on narrow windows */}
+      <div className="flex gap-1 bg-[#1e1e28] rounded-xl p-1 mb-6 border border-white/5 overflow-x-auto">
         {tabs.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-colors ${
+            className={`flex-1 min-w-[80px] flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
               tab === t.id
                 ? 'bg-sky-500/20 text-sky-400'
                 : 'text-slate-500 hover:text-slate-300'

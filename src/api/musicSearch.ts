@@ -1,6 +1,4 @@
-const MB_BASE = 'https://musicbrainz.org/ws/2';
-const CAA_BASE = 'https://coverartarchive.org';
-const USER_AGENT = 'PianoTracker/1.0 (practice-tracker-app)';
+const ITUNES_BASE = 'https://itunes.apple.com/search';
 
 export interface MBSearchResult {
   recordingId: string;
@@ -11,69 +9,59 @@ export interface MBSearchResult {
   year: number | null;
   coverUrl: string | null;
   spotifyUrl: string;
+  genre: string | null;
 }
 
-interface MBRecording {
-  id: string;
-  title: string;
-  score: number;
-  'artist-credit'?: Array<{ name?: string; artist: { name: string } }>;
-  releases?: Array<{
-    id: string;
-    title: string;
-    date?: string;
-  }>;
+interface ItunesTrack {
+  trackId: number;
+  trackName: string;
+  artistName: string;
+  collectionName?: string;
+  artworkUrl100?: string;
+  primaryGenreName?: string;
+  releaseDate?: string;
+  trackViewUrl?: string;
 }
 
 export async function searchRecordings(query: string): Promise<MBSearchResult[]> {
   if (!query.trim()) return [];
 
-  const url = `${MB_BASE}/recording?query=${encodeURIComponent(query)}&fmt=json&limit=8`;
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
-  if (!res.ok) throw new Error(`MusicBrainz error: ${res.status}`);
+  const url = `${ITUNES_BASE}?term=${encodeURIComponent(query)}&media=music&entity=musicTrack&limit=10`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`iTunes search error: ${res.status}`);
 
   const data = await res.json();
-  const recordings: MBRecording[] = data.recordings ?? [];
+  const tracks: ItunesTrack[] = data.results ?? [];
 
-  return recordings.slice(0, 8).map((rec) => {
-    const artistCredit = rec['artist-credit'];
-    const artist = artistCredit?.[0]?.name ?? artistCredit?.[0]?.artist?.name ?? 'Unknown Artist';
-    const release = rec.releases?.[0] ?? null;
-    const releaseId = release?.id ?? null;
-    const album = release?.title ?? null;
-    const yearStr = release?.date?.slice(0, 4);
+  return tracks.slice(0, 8).map((t) => {
+    const coverUrl = t.artworkUrl100
+      ? t.artworkUrl100.replace('100x100bb', '400x400bb')
+      : null;
+
+    const yearStr = t.releaseDate?.slice(0, 4);
     const year = yearStr ? parseInt(yearStr, 10) : null;
-    const spotifyUrl = `https://open.spotify.com/search/${encodeURIComponent(`${rec.title} ${artist}`)}`;
+
+    const spotifyUrl = `https://open.spotify.com/search/${encodeURIComponent(`${t.trackName} ${t.artistName}`)}`;
 
     return {
-      recordingId: rec.id,
-      releaseId,
-      title: rec.title,
-      artist,
-      album,
+      recordingId: String(t.trackId),
+      releaseId: null,
+      title: t.trackName,
+      artist: t.artistName,
+      album: t.collectionName ?? null,
       year,
-      coverUrl: releaseId ? `${CAA_BASE}/release/${releaseId}/front-250` : null,
+      coverUrl,
       spotifyUrl,
+      genre: t.primaryGenreName ?? null,
     };
   });
 }
 
-export async function fetchRecordingGenre(recordingId: string): Promise<string | null> {
-  try {
-    const url = `${MB_BASE}/recording/${recordingId}?inc=genres&fmt=json`;
-    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const genres: Array<{ name: string; count: number }> = data.genres ?? [];
-    if (genres.length === 0) return null;
-    genres.sort((a, b) => b.count - a.count);
-    return genres[0].name;
-  } catch {
-    return null;
-  }
+/** Genre is already returned by iTunes — this is a no-op kept for API compatibility */
+export async function fetchRecordingGenre(_recordingId: string): Promise<string | null> {
+  return null;
 }
 
-/** Test if a cover art URL exists (CAA returns 404 for releases without art) */
 export async function checkCoverArtExists(url: string): Promise<boolean> {
   try {
     const res = await fetch(url, { method: 'HEAD' });
@@ -82,3 +70,4 @@ export async function checkCoverArtExists(url: string): Promise<boolean> {
     return false;
   }
 }
+

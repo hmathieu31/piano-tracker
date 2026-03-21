@@ -33,7 +33,7 @@ export default function Insights() {
   const maxTod = Math.max(...timeOfDay.map(t => t.seconds), 1);
 
   return (
-    <div className="p-8 fade-in">
+    <div className="p-4 md:p-6 lg:p-8 fade-in">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-white">Insights</h1>
         <p className="text-slate-500 text-sm mt-1">Your practice patterns and records</p>
