@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.6](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.5...piano-tracker-v0.3.6) (2026-03-21)
+
+
+### Bug Fixes
+
+* MIDI reconnection after keyboard power cycle ([71a7672](https://github.com/hmathieu31/piano-tracker/commit/71a767282bb010579d933e0ab76b13d7c16b2055))
+
 ## [0.3.5](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v0.3.4...piano-tracker-v0.3.5) (2026-03-21)
 
 
