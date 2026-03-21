@@ -5,6 +5,10 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
+    // HeroUI theme classes live in nested node_modules (npm hoists per-package)
+    "./node_modules/@heroui/react/node_modules/@heroui/theme/dist/**/*.{js,mjs}",
+    "./node_modules/@heroui/form/node_modules/@heroui/theme/dist/**/*.{js,mjs}",
+    // Fallback in case a future npm version hoists it to top-level
     "./node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}"
   ],
   darkMode: 'class',
