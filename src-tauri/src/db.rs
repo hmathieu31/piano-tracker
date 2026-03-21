@@ -171,6 +171,11 @@ impl Database {
         let _ = conn.execute("ALTER TABLE sessions ADD COLUMN song_name TEXT", []);
         let _ = conn.execute("ALTER TABLE sessions ADD COLUMN feeling INTEGER", []);
         let _ = conn.execute("ALTER TABLE songs ADD COLUMN status TEXT DEFAULT 'learning'", []);
+        // Clean up any pre-existing orphan songs (songs with no sessions)
+        let _ = conn.execute(
+            "DELETE FROM songs WHERE NOT EXISTS (SELECT 1 FROM sessions WHERE song_id = songs.id)",
+            [],
+        );
         Ok(())
     }
 
@@ -689,7 +694,7 @@ impl Database {
                     AVG(s.feeling) as avg_feeling,
                     sg.status
              FROM songs sg
-             LEFT JOIN sessions s ON s.song_id = sg.id
+             INNER JOIN sessions s ON s.song_id = sg.id
              GROUP BY sg.id
              ORDER BY total_seconds DESC"
         )?;
@@ -720,18 +725,52 @@ impl Database {
 
     // ── Session-Song linking ─────────────────────────────────────────────────
 
+    /// Delete a song that has no sessions remaining. Safe to call speculatively.
+    fn delete_if_orphan(conn: &rusqlite::Connection, song_id: i64) -> Result<(), rusqlite::Error> {
+        conn.execute(
+            "DELETE FROM songs WHERE id = ?1
+             AND NOT EXISTS (SELECT 1 FROM sessions WHERE song_id = ?1)",
+            params![song_id],
+        )?;
+        Ok(())
+    }
+
     pub fn link_session_song(&self, session_id: i64, song_id: i64) -> Result<(), rusqlite::Error> {
         let conn = self.conn.lock().unwrap();
+        // Capture the song that is being displaced (if any)
+        let old_song_id: Option<i64> = conn.query_row(
+            "SELECT song_id FROM sessions WHERE id = ?1",
+            params![session_id],
+            |row| row.get(0),
+        ).ok().flatten();
+
         conn.execute(
             "UPDATE sessions SET song_id = ?1 WHERE id = ?2",
             params![song_id, session_id],
         )?;
+
+        // If we replaced a different song, clean it up if it is now orphaned
+        if let Some(old_id) = old_song_id {
+            if old_id != song_id {
+                Self::delete_if_orphan(&conn, old_id)?;
+            }
+        }
         Ok(())
     }
 
     pub fn unlink_session_song(&self, session_id: i64) -> Result<(), rusqlite::Error> {
         let conn = self.conn.lock().unwrap();
+        let song_id: Option<i64> = conn.query_row(
+            "SELECT song_id FROM sessions WHERE id = ?1",
+            params![session_id],
+            |row| row.get(0),
+        ).ok().flatten();
+
         conn.execute("UPDATE sessions SET song_id = NULL WHERE id = ?1", params![session_id])?;
+
+        if let Some(id) = song_id {
+            Self::delete_if_orphan(&conn, id)?;
+        }
         Ok(())
     }
 
