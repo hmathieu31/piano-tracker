@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.2.1...piano-tracker-v1.3.0) (2026-03-21)
+
+
+### Features
+
+* migrate to HeroUI component library ([bd9fa59](https://github.com/hmathieu31/piano-tracker/commit/bd9fa59c6ad9054786d444d3a1d9ef010545e250))
+
+
+### Bug Fixes
+
+* correct HeroUI setup to resolve component rendering issues ([74a6f2e](https://github.com/hmathieu31/piano-tracker/commit/74a6f2eed45b862d46bd1cff1925c625e7e50f55))
+* fix Tailwind content path so HeroUI classes aren't purged ([440f2ca](https://github.com/hmathieu31/piano-tracker/commit/440f2ca04943a647ac74d121f48f5ba524292068))
+
 ## [1.2.1](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.2.0...piano-tracker-v1.2.1) (2026-03-21)
 
 
