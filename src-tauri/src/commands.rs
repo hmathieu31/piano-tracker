@@ -1,4 +1,5 @@
 use tauri::State;
+use tauri::Manager;
 use std::sync::Arc;
 use crate::db::{Database, SessionRecord, DailyTotal, GoalsConfig, StreakInfo, InsightsData,
                 GoalsStatus, AchievementInfo, SongRecord, MidiEventRecord};
@@ -145,6 +146,27 @@ pub fn get_midi_events(db: State<DbState>, session_id: i64) -> Result<Vec<MidiEv
 pub fn export_midi_file(db: State<DbState>, session_id: i64) -> Result<Vec<u8>, String> {
     let events = db.get_midi_events(session_id).map_err(|e| e.to_string())?;
     Ok(build_midi_file(&events))
+}
+
+/// Write the MIDI file to the user's Downloads folder and return the full path.
+/// The frontend can then use revealItemInDir (plugin-opener) to show it in Explorer.
+#[tauri::command]
+pub fn save_midi_file(
+    app: tauri::AppHandle,
+    db: State<DbState>,
+    session_id: i64,
+    date: String,
+) -> Result<String, String> {
+    let events = db.get_midi_events(session_id).map_err(|e| e.to_string())?;
+    let bytes = build_midi_file(&events);
+
+    let downloads = app.path().download_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&downloads).map_err(|e| e.to_string())?;
+    let filename = format!("piano-session-{}-{}.mid", date, session_id);
+    let path = downloads.join(&filename);
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+
+    Ok(path.to_string_lossy().to_string())
 }
 
 fn build_midi_file(events: &[MidiEventRecord]) -> Vec<u8> {

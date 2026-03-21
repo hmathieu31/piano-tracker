@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
 import {
   Tabs, Tab, Card, CardBody, Button, Chip, Modal, ModalContent,
   ModalHeader, ModalBody, Image, Spinner,
@@ -44,14 +45,8 @@ function SessionDetailPanel({
   const exportMidi = async () => {
     setExportingMidi(true);
     try {
-      const bytes = await invoke<number[]>('export_midi_file', { sessionId: session.id });
-      const blob = new Blob([new Uint8Array(bytes)], { type: 'audio/midi' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `session-${session.date}-${session.id}.mid`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const path = await invoke<string>('save_midi_file', { sessionId: session.id, date: session.date });
+      await revealItemInDir(path);
     } catch (e) {
       console.error('MIDI export failed', e);
     } finally {
@@ -123,9 +118,11 @@ function SessionDetailPanel({
                           {session.song.album && <Chip size="sm" variant="flat" className="h-5 text-[10px] bg-content3 text-foreground-400">{session.song.album}</Chip>}
                           {session.song.year && <Chip size="sm" variant="flat" className="h-5 text-[10px] bg-content3 text-foreground-400">{session.song.year}</Chip>}
                           {session.song.spotify_url && (
-                            <a href={session.song.spotify_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
-                              <Chip size="sm" variant="flat" color="success" className="h-5 text-[10px] cursor-pointer hover:opacity-80">🎧 Spotify</Chip>
-                            </a>
+                            <Chip
+                              size="sm" variant="flat" color="success"
+                              className="h-5 text-[10px] cursor-pointer hover:opacity-80"
+                              onClick={(e) => { e.stopPropagation(); openUrl(session.song!.spotify_url!); }}
+                            >🎧 Spotify</Chip>
                           )}
                         </div>
                       </div>

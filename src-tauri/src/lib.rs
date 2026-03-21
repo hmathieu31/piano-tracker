@@ -134,6 +134,7 @@ pub fn run() {
             // MIDI events
             commands::get_midi_events,
             commands::export_midi_file,
+            commands::save_midi_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
