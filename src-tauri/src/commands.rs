@@ -148,8 +148,8 @@ pub fn export_midi_file(db: State<DbState>, session_id: i64) -> Result<Vec<u8>, 
     Ok(build_midi_file(&events))
 }
 
-/// Write the MIDI file to the user's Downloads folder and return the full path.
-/// The frontend can then use revealItemInDir (plugin-opener) to show it in Explorer.
+/// Write the MIDI file to the configured save folder (or Downloads as fallback).
+/// Returns the full path so the frontend can reveal it in Explorer.
 #[tauri::command]
 pub fn save_midi_file(
     app: tauri::AppHandle,
@@ -161,10 +161,20 @@ pub fn save_midi_file(
     let events = db.get_midi_events(session_id).map_err(|e| e.to_string())?;
     let bytes = build_midi_file(&events);
 
-    let downloads = app.path().download_dir().map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&downloads).map_err(|e| e.to_string())?;
+    // Use midi_save_folder setting if configured, otherwise fall back to Downloads
+    let save_dir = db.get_setting("midi_save_folder")
+        .ok()
+        .flatten()
+        .filter(|p| !p.trim().is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            app.path().download_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
+
+    std::fs::create_dir_all(&save_dir).map_err(|e| e.to_string())?;
     let filename = make_midi_filename(&date, session_id, song_name.as_deref());
-    let path = downloads.join(&filename);
+    let path = save_dir.join(&filename);
     std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
 
     Ok(path.to_string_lossy().to_string())
@@ -184,151 +194,6 @@ fn make_midi_filename(date: &str, session_id: i64, song_name: Option<&str>) -> S
         Some(name) => format!("piano-session-{}-{}.mid", date, sanitise_for_filename(name)),
         None => format!("piano-session-{}-{}.mid", date, session_id),
     }
-}
-
-/// Upload MIDI data for a session directly to a Cozy Cloud drive folder.
-///
-/// Settings keys used (get_setting):
-///   cozy_url    – e.g. https://myname.mycozy.cloud
-///   cozy_token  – OAuth2 Bearer token
-///   cozy_folder – target folder path, e.g. /Piano Sessions
-///
-/// Returns the Cozy file URL on success.
-#[tauri::command]
-pub async fn upload_midi_to_cozy(
-    db: State<'_, DbState>,
-    session_id: i64,
-    date: String,
-    song_name: Option<String>,
-) -> Result<String, String> {
-    // Read settings
-    let cozy_url = db.get_setting("cozy_url").map_err(|e| e.to_string())?
-        .ok_or("Cozy URL not configured. Open Settings → Cozy Cloud.")?;
-    let cozy_token = db.get_setting("cozy_token").map_err(|e| e.to_string())?
-        .ok_or("Cozy token not configured. Open Settings → Cozy Cloud.")?;
-    let cozy_folder = db.get_setting("cozy_folder").map_err(|e| e.to_string())?
-        .unwrap_or_else(|| "/Piano Sessions".to_string());
-
-    let base = cozy_url.trim_end_matches('/');
-    let filename = make_midi_filename(&date, session_id, song_name.as_deref());
-    let midi_bytes = build_midi_file(&db.get_midi_events(session_id).map_err(|e| e.to_string())?);
-
-    let client = reqwest::Client::new();
-    let auth = format!("Bearer {}", cozy_token.trim());
-
-    // 1. Resolve the target folder, creating it if it doesn't exist.
-    let folder_id = ensure_cozy_folder(&client, base, &auth, &cozy_folder).await?;
-
-    // 2. Upload the file into that folder.
-    let upload_url = format!(
-        "{}/files/{}?Type=file&Name={}&ContentLength={}",
-        base,
-        folder_id,
-        urlencoding_encode(&filename),
-        midi_bytes.len()
-    );
-    let resp = client
-        .post(&upload_url)
-        .header("Authorization", &auth)
-        .header("Content-Type", "audio/midi")
-        .body(midi_bytes)
-        .send()
-        .await
-        .map_err(|e| format!("Upload request failed: {}", e))?;
-
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(format!("Cozy upload failed ({}): {}", status, body));
-    }
-
-    let json: serde_json::Value = resp.json().await
-        .map_err(|e| format!("Failed to parse Cozy response: {}", e))?;
-
-    // Return the shareable link or just the file path for confirmation
-    let cozy_path = json["data"]["attributes"]["path"]
-        .as_str()
-        .unwrap_or(&filename)
-        .to_string();
-
-    Ok(format!("{}/#/drive{}", base, cozy_path))
-}
-
-/// Ensure the given folder path exists in Cozy and return its `_id`.
-async fn ensure_cozy_folder(
-    client: &reqwest::Client,
-    base: &str,
-    auth: &str,
-    folder_path: &str,
-) -> Result<String, String> {
-    let folder_path = if folder_path.starts_with('/') {
-        folder_path.to_string()
-    } else {
-        format!("/{}", folder_path)
-    };
-
-    // Try to get folder metadata by path
-    let meta_url = format!("{}/files/metadata?Path={}", base, urlencoding_encode(&folder_path));
-    let resp = client
-        .get(&meta_url)
-        .header("Authorization", auth)
-        .send()
-        .await
-        .map_err(|e| format!("Cozy metadata request failed: {}", e))?;
-
-    if resp.status().is_success() {
-        let json: serde_json::Value = resp.json().await
-            .map_err(|e| format!("Failed to parse Cozy metadata: {}", e))?;
-        return json["data"]["_id"]
-            .as_str()
-            .map(|s| s.to_string())
-            .ok_or_else(|| "Cozy folder ID not found in response".to_string());
-    }
-
-    if resp.status().as_u16() == 404 {
-        // Create the folder under the root directory
-        let folder_name = folder_path.trim_matches('/').split('/').last()
-            .unwrap_or("Piano Sessions");
-        let create_url = format!(
-            "{}/files/io.cozy.files.root-dir?Type=directory&Name={}",
-            base,
-            urlencoding_encode(folder_name)
-        );
-        let create_resp = client
-            .post(&create_url)
-            .header("Authorization", auth)
-            .header("Content-Type", "application/json")
-            .send()
-            .await
-            .map_err(|e| format!("Cozy mkdir failed: {}", e))?;
-
-        if !create_resp.status().is_success() {
-            let status = create_resp.status();
-            let body = create_resp.text().await.unwrap_or_default();
-            return Err(format!("Could not create Cozy folder ({}): {}", status, body));
-        }
-
-        let json: serde_json::Value = create_resp.json().await
-            .map_err(|e| format!("Failed to parse Cozy mkdir response: {}", e))?;
-        return json["data"]["_id"]
-            .as_str()
-            .map(|s| s.to_string())
-            .ok_or_else(|| "Cozy created folder ID not found".to_string());
-    }
-
-    Err(format!("Cozy folder lookup failed ({})", resp.status()))
-}
-
-/// Percent-encode a string for use in a URL query parameter.
-fn urlencoding_encode(s: &str) -> String {
-    s.chars().flat_map(|c| {
-        if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '~' {
-            vec![c]
-        } else {
-            let encoded = format!("%{:02X}", c as u32);
-            encoded.chars().collect()
-        }
-    }).collect()
 }
 
 fn build_midi_file(events: &[MidiEventRecord]) -> Vec<u8> {

@@ -51,12 +51,7 @@ export default function Settings() {
   const [weeklySummary, setWeeklySummary] = useState(true);
   const [debounceSeconds, setDebounceSeconds] = useState(10);
 
-  // Cozy Cloud integration
-  const [cozyUrl, setCozyUrl] = useState('');
-  const [cozyToken, setCozyToken] = useState('');
-  const [cozyFolder, setCozyFolder] = useState('/Piano Sessions');
-  const [cozyTestState, setCozyTestState] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
-  const [cozyTestMsg, setCozyTestMsg] = useState('');
+  const [midiSaveFolder, setMidiSaveFolder] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -76,12 +71,8 @@ export default function Settings() {
         if (ws !== null) setWeeklySummary(ws !== 'false');
         const db = await invoke<string | null>('get_setting', { key: 'debounce_seconds' });
         if (db !== null) setDebounceSeconds(Number(db));
-        const cu = await invoke<string | null>('get_setting', { key: 'cozy_url' });
-        if (cu) setCozyUrl(cu);
-        const ct = await invoke<string | null>('get_setting', { key: 'cozy_token' });
-        if (ct) setCozyToken(ct);
-        const cf = await invoke<string | null>('get_setting', { key: 'cozy_folder' });
-        if (cf) setCozyFolder(cf);
+        const msf = await invoke<string | null>('get_setting', { key: 'midi_save_folder' });
+        if (msf) setMidiSaveFolder(msf);
       } catch {}
     };
     load();
@@ -96,41 +87,13 @@ export default function Settings() {
       await invoke('set_setting', { key: 'streak_alert', value: streakAlert.toString() });
       await invoke('set_setting', { key: 'weekly_summary', value: weeklySummary.toString() });
       await invoke('set_setting', { key: 'debounce_seconds', value: debounceSeconds.toString() });
-      await invoke('set_setting', { key: 'cozy_url', value: cozyUrl.trim() });
-      await invoke('set_setting', { key: 'cozy_token', value: cozyToken.trim() });
-      await invoke('set_setting', { key: 'cozy_folder', value: cozyFolder.trim() });
+      await invoke('set_setting', { key: 'midi_save_folder', value: midiSaveFolder.trim() });
       await refreshGoals();
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } finally {
       setSaving(false);
     }
-  };
-
-  const testCozyConnection = async () => {
-    setCozyTestState('testing');
-    setCozyTestMsg('');
-    try {
-      // Save settings first so Rust can read them
-      await invoke('set_setting', { key: 'cozy_url', value: cozyUrl.trim() });
-      await invoke('set_setting', { key: 'cozy_token', value: cozyToken.trim() });
-      await invoke('set_setting', { key: 'cozy_folder', value: cozyFolder.trim() });
-      // Attempt folder resolution as a connection test
-      await invoke('upload_midi_to_cozy', { sessionId: -1, date: 'test', songName: null });
-      setCozyTestState('ok');
-      setCozyTestMsg('Connected!');
-    } catch (e) {
-      const msg = String(e);
-      // "No MIDI events" means we reached Cozy successfully (the session -1 has no data)
-      if (msg.includes('No MIDI') || msg.includes('midi') || msg.includes('not found')) {
-        setCozyTestState('ok');
-        setCozyTestMsg('Connected to Cozy Cloud ✓');
-      } else {
-        setCozyTestState('error');
-        setCozyTestMsg(msg);
-      }
-    }
-    setTimeout(() => setCozyTestState('idle'), 4000);
   };
 
   const hourLabel = (h: number) => {
@@ -244,46 +207,15 @@ export default function Settings() {
         </Row>
       </Section>
 
-      <Section title="Cozy Cloud" description="Upload MIDI sessions to your personal cloud drive">
-        <Row label="Instance URL" description="e.g. https://yourname.mycozy.cloud">
+      <Section title="MIDI Export" description="Where to save exported .mid files">
+        <Row label="Save folder" description="Leave empty to save to Downloads">
           <Input
             size="sm"
-            placeholder="https://yourname.mycozy.cloud"
-            value={cozyUrl}
-            onValueChange={setCozyUrl}
-            classNames={{ base: 'w-56', inputWrapper: 'bg-content3 border-divider h-8', input: 'text-xs' }}
+            placeholder="C:\Users\you\Cozy Drive\Piano Sessions"
+            value={midiSaveFolder}
+            onValueChange={setMidiSaveFolder}
+            classNames={{ base: 'w-80', inputWrapper: 'bg-content3 border-divider h-8', input: 'text-xs' }}
           />
-        </Row>
-        <Row label="Access token" description="Generate at Settings → Tokens in your Cozy">
-          <Input
-            size="sm"
-            type="password"
-            placeholder="Bearer token"
-            value={cozyToken}
-            onValueChange={setCozyToken}
-            classNames={{ base: 'w-56', inputWrapper: 'bg-content3 border-divider h-8', input: 'text-xs' }}
-          />
-        </Row>
-        <Row label="Upload folder" description="Folder path in your Cozy drive">
-          <Input
-            size="sm"
-            placeholder="/Piano Sessions"
-            value={cozyFolder}
-            onValueChange={setCozyFolder}
-            classNames={{ base: 'w-56', inputWrapper: 'bg-content3 border-divider h-8', input: 'text-xs' }}
-          />
-        </Row>
-        <Row label="Connection" description={cozyTestState === 'ok' ? cozyTestMsg : cozyTestState === 'error' ? cozyTestMsg : 'Verify your settings'}>
-          <Button
-            size="sm"
-            variant="bordered"
-            color={cozyTestState === 'ok' ? 'success' : cozyTestState === 'error' ? 'danger' : 'default'}
-            onPress={testCozyConnection}
-            isLoading={cozyTestState === 'testing'}
-            className="border-white/15 text-foreground-300"
-          >
-            Test connection
-          </Button>
         </Row>
       </Section>
 

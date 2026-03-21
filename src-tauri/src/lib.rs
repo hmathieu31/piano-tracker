@@ -136,7 +136,6 @@ pub fn run() {
             commands::get_midi_events,
             commands::export_midi_file,
             commands::save_midi_file,
-            commands::upload_midi_to_cozy,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
