@@ -15,6 +15,10 @@ pub struct SessionInner {
     pub midi_port_name: Option<String>,
     pub midi_connected: bool,
     pub midi_buffer: Vec<crate::db::MidiEventRecord>,
+    /// Wall-clock time of the first note-on buffered in the current session.
+    /// Used as the timing origin for relative_ms — avoids the ~500ms skew
+    /// that comes from using start_ts (set by the debounce thread).
+    pub midi_buffer_start: Option<Instant>,
 }
 
 pub type SharedSession = Arc<Mutex<SessionInner>>;
@@ -133,13 +137,15 @@ pub fn start_midi_listener(
                 if should_start {
                     s.is_active = true;
                     s.start_ts = Some(now_ms());
-                    s.midi_buffer.clear(); // fresh buffer for new session
+                    // Do NOT clear midi_buffer here — the notes that triggered
+                    // this session are already in the buffer and must be kept.
                 }
 
                 let start_ts_to_save = if should_end { s.start_ts } else { None };
                 let events_to_save = if should_end {
                     let ev = s.midi_buffer.clone();
                     s.midi_buffer.clear();
+                    s.midi_buffer_start = None; // reset timing origin for next session
                     ev
                 } else {
                     Vec::new()
@@ -265,6 +271,8 @@ fn try_connect_once(session: SharedSession, client_id: u32) -> Result<(midir::Mi
         s.midi_connected = true;
         s.midi_port_name = Some(port_name.clone());
         s.last_midi_instant = None;
+        s.midi_buffer.clear();
+        s.midi_buffer_start = None;
     }
 
     let session_cb = session.clone();
@@ -276,13 +284,19 @@ fn try_connect_once(session: SharedSession, client_id: u32) -> Result<(midir::Mi
         // note-off (0x80–0x8F) or note-on with velocity 0
         let is_note_off = ((status & 0xF0) == 0x80 && msg.len() >= 3)
                        || ((status & 0xF0) == 0x90 && msg.len() >= 3 && msg[2] == 0);
+        // Sustain pedal and all other CC (0xBx) are intentionally excluded here.
 
         if is_note_on || is_note_off {
+            let now = Instant::now();
             let mut s = session_cb.lock().unwrap();
             if is_note_on {
-                s.last_midi_instant = Some(Instant::now());
+                s.last_midi_instant = Some(now);
             }
-            let relative_ms = s.start_ts.map(|st| now_ms() - st).unwrap_or(0);
+            // Use wall-clock delta from the very first buffered note as the
+            // timing origin. This avoids the ≤500ms skew from start_ts, which
+            // is set by the debounce thread after the first note is played.
+            let first = *s.midi_buffer_start.get_or_insert(now);
+            let relative_ms = now.duration_since(first).as_millis() as i64;
             s.midi_buffer.push(crate::db::MidiEventRecord {
                 relative_ms,
                 note: if msg.len() > 1 { msg[1] } else { 0 },

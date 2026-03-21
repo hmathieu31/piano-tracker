@@ -35,6 +35,7 @@ pub fn run() {
                 midi_port_name: None,
                 midi_connected: false,
                 midi_buffer: Vec::new(),
+                midi_buffer_start: None,
             }));
 
             app.manage(db.clone() as DbState);
