@@ -4,7 +4,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::thread;
 use midir::MidiInput;
 use chrono::Local;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri::Emitter;
 use crate::db::Database;
 
@@ -181,6 +181,33 @@ pub fn start_midi_listener(
                                 }
                             }
                             let _ = app_debounce.emit("session-ended", session_id);
+
+                            // Show a Windows toast if the app isn't in the foreground,
+                            // so the user knows to open it and tag the session.
+                            let is_focused = app_debounce
+                                .get_webview_window("main")
+                                .map(|w| w.is_focused().unwrap_or(false))
+                                .unwrap_or(false);
+                            if !is_focused {
+                                use tauri_plugin_notification::NotificationExt;
+                                let mins = duration_seconds / 60;
+                                let secs = duration_seconds % 60;
+                                let duration_str = if mins > 0 && secs > 0 {
+                                    format!("{}m {}s", mins, secs)
+                                } else if mins > 0 {
+                                    format!("{}m", mins)
+                                } else {
+                                    format!("{}s", secs)
+                                };
+                                let _ = app_debounce.notification()
+                                    .builder()
+                                    .title("🎹 Practice session saved!")
+                                    .body(&format!(
+                                        "You practiced for {}. Open Piano Tracker to tag it with a song.",
+                                        duration_str
+                                    ))
+                                    .show();
+                            }
 
                             if let Ok(status) = db_debounce.get_goals_status() {
                                 let daily_seconds_needed = status.config.daily_minutes as i64 * 60;

@@ -4,6 +4,8 @@ import UpdateBanner from './UpdateBanner';
 import QuickAssociateBanner from './QuickAssociateBanner';
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { onAction } from '@tauri-apps/plugin-notification';
 import { useState, useEffect, useCallback } from 'react';
 
 const navItems = [
@@ -22,6 +24,17 @@ export default function Layout() {
   const [reconnecting, setReconnecting] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
+
+  // When a notification is clicked (e.g. session-ended toast), bring the window to focus
+  useEffect(() => {
+    const appWindow = getCurrentWebviewWindow();
+    let listener: { unregister: () => Promise<void> } | undefined;
+    onAction(async () => {
+      await appWindow.show();
+      await appWindow.setFocus();
+    }).then(l => { listener = l; }).catch(() => {});
+    return () => { listener?.unregister(); };
+  }, []);
 
   const handleReconnect = useCallback(async () => {
     setReconnecting(true);
