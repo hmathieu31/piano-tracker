@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Textarea, Image, Chip } from '@heroui/react';
 import { searchRecordings, type MBSearchResult } from '../api/musicSearch';
-import type { SongRecord, MasterySuggestion } from '../types';
+import type { SongRecord, SongDetail, MasterySuggestion } from '../types';
 import confetti from 'canvas-confetti';
 import { DifficultyDots } from './DifficultyDots';
 
@@ -273,6 +273,15 @@ export default function SessionTagModal({ sessionId, durationSeconds, onClose, d
     debounceRef.current = setTimeout(() => doSearch(v), 600);
   };
 
+  // create_song returns the existing entry when the song is already in the
+  // catalog, so load its real stats (sessions, mastery) for the details step.
+  const loadCatalogSong = async (songId: number): Promise<SongRecord | null> => {
+    try {
+      const detail = await invoke<SongDetail | null>('get_song_with_sessions', { songId });
+      return detail?.song ?? null;
+    } catch { return null; }
+  };
+
   const assignFromSearch = async (result: MBSearchResult) => {
     setSaving(true);
     try {
@@ -289,7 +298,7 @@ export default function SessionTagModal({ sessionId, durationSeconds, onClose, d
         musicbrainz_release_id: result.releaseId, created_at: Date.now(),
         session_count: 0,
       };
-      handlePickSong(song);
+      handlePickSong(await loadCatalogSong(songId) ?? song);
     } catch { } finally { setSaving(false); }
   };
 
@@ -302,7 +311,7 @@ export default function SessionTagModal({ sessionId, durationSeconds, onClose, d
         year: null, coverUrl: null, spotifyUrl: null, mbRecordingId: null, mbReleaseId: null,
         difficulty: null,
       });
-      handlePickSong({ id: songId, title: searchQuery.trim(), artist: null, genre: null, album: null, year: null, cover_url: null, spotify_url: null, musicbrainz_recording_id: null, musicbrainz_release_id: null, created_at: Date.now(), session_count: 0 });
+      handlePickSong(await loadCatalogSong(songId) ?? { id: songId, title: searchQuery.trim(), artist: null, genre: null, album: null, year: null, cover_url: null, spotify_url: null, musicbrainz_recording_id: null, musicbrainz_release_id: null, created_at: Date.now(), session_count: 0 });
     } catch { } finally { setSaving(false); }
   };
 

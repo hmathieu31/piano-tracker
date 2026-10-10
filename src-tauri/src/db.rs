@@ -1,5 +1,10 @@
 use std::sync::Mutex;
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
+
+/// Normalized identity of a song in the catalog: case- and whitespace-
+/// insensitive title + artist. Used by the unique index and lookups.
+const SONG_KEY_TITLE: &str = "LOWER(TRIM(title))";
+const SONG_KEY_ARTIST: &str = "LOWER(TRIM(COALESCE(artist, '')))";
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -188,7 +193,86 @@ impl Database {
             "DELETE FROM songs WHERE NOT EXISTS (SELECT 1 FROM sessions WHERE song_id = songs.id)",
             [],
         );
+        // Merge duplicate songs created by earlier versions, then enforce one
+        // catalog entry per (title, artist).
+        if let Err(e) = Self::merge_duplicate_songs(&conn) {
+            eprintln!("[db] Failed to merge duplicate songs: {e}");
+        }
+        if let Err(e) = conn.execute_batch(&format!(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_songs_identity ON songs({SONG_KEY_TITLE}, {SONG_KEY_ARTIST})"
+        )) {
+            eprintln!("[db] Failed to create song uniqueness index: {e}");
+        }
         Ok(())
+    }
+
+    /// Collapse songs sharing the same normalized (title, artist) into the
+    /// oldest entry. Sessions are re-pointed to the survivor, missing metadata
+    /// is filled from the duplicates and the most advanced mastery status wins.
+    /// A backup of the database is written next to it before anything changes.
+    fn merge_duplicate_songs(conn: &Connection) -> Result<usize, rusqlite::Error> {
+        let groups: Vec<(i64, String)> = {
+            let mut stmt = conn.prepare(&format!(
+                "SELECT MIN(id), GROUP_CONCAT(id) FROM songs
+                 GROUP BY {SONG_KEY_TITLE}, {SONG_KEY_ARTIST}
+                 HAVING COUNT(*) > 1"
+            ))?;
+            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect::<Result<_, _>>()?
+        };
+        if groups.is_empty() {
+            return Ok(0);
+        }
+
+        if let Some(path) = conn.path().filter(|p| !p.is_empty()) {
+            let backup = format!("{path}.before-song-dedupe.bak");
+            if !std::path::Path::new(&backup).exists() {
+                conn.execute("VACUUM INTO ?1", params![backup])?;
+            }
+        }
+
+        let tx = conn.unchecked_transaction()?;
+        let mut removed = 0;
+        for (keep_id, ids) in &groups {
+            let dupes: Vec<i64> = ids
+                .split(',')
+                .filter_map(|id| id.parse().ok())
+                .filter(|id| id != keep_id)
+                .collect();
+            for dupe_id in dupes {
+                tx.execute(
+                    "UPDATE songs SET
+                        artist                   = COALESCE(songs.artist, d.artist),
+                        genre                    = COALESCE(songs.genre, d.genre),
+                        album                    = COALESCE(songs.album, d.album),
+                        year                     = COALESCE(songs.year, d.year),
+                        cover_url                = COALESCE(songs.cover_url, d.cover_url),
+                        spotify_url              = COALESCE(songs.spotify_url, d.spotify_url),
+                        musicbrainz_recording_id = COALESCE(songs.musicbrainz_recording_id, d.musicbrainz_recording_id),
+                        musicbrainz_release_id   = COALESCE(songs.musicbrainz_release_id, d.musicbrainz_release_id),
+                        difficulty               = COALESCE(songs.difficulty, d.difficulty),
+                        status = CASE
+                            WHEN 'mastered'   IN (songs.status, d.status) THEN 'mastered'
+                            WHEN 'practicing' IN (songs.status, d.status) THEN 'practicing'
+                            ELSE COALESCE(songs.status, d.status)
+                        END
+                     FROM (SELECT * FROM songs WHERE id = ?2) AS d
+                     WHERE songs.id = ?1",
+                    params![keep_id, dupe_id],
+                )?;
+                tx.execute(
+                    "UPDATE sessions SET song_id = ?1,
+                        song_name = (SELECT title FROM songs WHERE id = ?1)
+                     WHERE song_id = ?2",
+                    params![keep_id, dupe_id],
+                )?;
+                tx.execute("DELETE FROM songs WHERE id = ?1", params![dupe_id])?;
+                removed += 1;
+            }
+        }
+        tx.commit()?;
+        eprintln!("[db] Merged {removed} duplicate song(s) into {} entries", groups.len());
+        Ok(removed)
     }
 
     pub fn insert_session(&self, date: &str, start_ts: i64, end_ts: i64, duration_seconds: i64) -> Result<i64, rusqlite::Error> {
@@ -648,6 +732,41 @@ impl Database {
         use std::time::{SystemTime, UNIX_EPOCH};
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
         let conn = self.conn.lock().unwrap();
+
+        // Reuse the catalog entry if this song already exists. A title typed
+        // without an artist matches any existing song with that title.
+        let artist = artist.map(str::trim).filter(|a| !a.is_empty());
+        let existing: Option<i64> = conn.query_row(
+            &format!(
+                "SELECT id FROM songs
+                 WHERE {SONG_KEY_TITLE} = LOWER(TRIM(?1))
+                   AND (?2 IS NULL OR {SONG_KEY_ARTIST} = LOWER(TRIM(?2)))
+                 ORDER BY ({SONG_KEY_ARTIST} = LOWER(TRIM(COALESCE(?2, '')))) DESC, id ASC
+                 LIMIT 1"
+            ),
+            params![title, artist],
+            |r| r.get(0),
+        ).optional()?;
+        if let Some(id) = existing {
+            // Fill in metadata the existing entry is missing, never overwrite.
+            conn.execute(
+                "UPDATE songs SET
+                    artist                   = COALESCE(artist, ?2),
+                    genre                    = COALESCE(genre, ?3),
+                    album                    = COALESCE(album, ?4),
+                    year                     = COALESCE(year, ?5),
+                    cover_url                = COALESCE(cover_url, ?6),
+                    spotify_url              = COALESCE(spotify_url, ?7),
+                    musicbrainz_recording_id = COALESCE(musicbrainz_recording_id, ?8),
+                    musicbrainz_release_id   = COALESCE(musicbrainz_release_id, ?9),
+                    difficulty               = COALESCE(difficulty, ?10)
+                 WHERE id = ?1",
+                params![id, artist, genre, album, year, cover_url, spotify_url,
+                        mb_recording_id, mb_release_id, difficulty],
+            )?;
+            return Ok(id);
+        }
+
         conn.execute(
             "INSERT INTO songs (title, artist, genre, album, year, cover_url, spotify_url,
                                musicbrainz_recording_id, musicbrainz_release_id, created_at, difficulty)
@@ -1148,5 +1267,77 @@ impl Database {
             })
         })?;
         rows.collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn song(db: &Database, title: &str, artist: Option<&str>, rec_id: Option<&str>) -> i64 {
+        db.create_song(title, artist, None, None, None, None, None, rec_id, None, None).unwrap()
+    }
+
+    fn session_with_song(db: &Database, song_id: i64) -> i64 {
+        let sid = db.insert_session("2026-10-01", 0, 60, 60).unwrap();
+        db.link_session_song(sid, song_id).unwrap();
+        sid
+    }
+
+    #[test]
+    fn create_song_reuses_existing_entry() {
+        let db = Database::new(std::path::Path::new(":memory:")).unwrap();
+        db.init().unwrap();
+        let a = song(&db, "Clair de Lune", Some("Claude Debussy"), Some("123"));
+        let b = song(&db, " clair de lune ", Some("claude debussy"), Some("456"));
+        assert_eq!(a, b);
+        // Title typed without an artist matches the existing song.
+        assert_eq!(song(&db, "Clair de lune", None, None), a);
+        // Same title by another artist is a different song.
+        assert_ne!(song(&db, "Clair de Lune", Some("Someone Else"), None), a);
+    }
+
+    #[test]
+    fn init_merges_existing_duplicates() {
+        let db = Database::new(std::path::Path::new(":memory:")).unwrap();
+        db.init().unwrap();
+        let (s1, s2, s3);
+        {
+            let conn = db.conn.lock().unwrap();
+            // Simulate a database from before the uniqueness index existed.
+            conn.execute_batch("DROP INDEX idx_songs_identity").unwrap();
+            conn.execute_batch(
+                "INSERT INTO songs (id, title, artist, created_at, status) VALUES
+                    (1, 'Nuvole Bianche', 'Ludovico Einaudi', 0, 'learning'),
+                    (2, 'nuvole bianche', 'Ludovico Einaudi', 0, 'practicing'),
+                    (3, 'Nuvole Bianche ', 'ludovico einaudi', 0, 'learning'),
+                    (4, 'Experience', 'Ludovico Einaudi', 0, 'learning');
+                 UPDATE songs SET cover_url = 'cover.jpg', difficulty = 3 WHERE id = 3;",
+            ).unwrap();
+        }
+        s1 = session_with_song(&db, 1);
+        s2 = session_with_song(&db, 2);
+        s3 = session_with_song(&db, 3);
+        session_with_song(&db, 4);
+
+        db.init().unwrap();
+
+        let songs = db.get_song_stats().unwrap();
+        assert_eq!(songs.len(), 2);
+        let merged = songs.iter().find(|s| s.id == 1).unwrap();
+        assert_eq!(merged.session_count, Some(3));
+        assert_eq!(merged.status.as_deref(), Some("practicing"));
+        assert_eq!(merged.cover_url.as_deref(), Some("cover.jpg"));
+        assert_eq!(merged.difficulty, Some(3));
+        let ids: Vec<i64> = db.get_sessions_for_song(1).unwrap().iter().map(|s| s.id).collect();
+        for sid in [s1, s2, s3] {
+            assert!(ids.contains(&sid));
+        }
+        // Uniqueness is now enforced at the database level.
+        let conn = db.conn.lock().unwrap();
+        assert!(conn.execute(
+            "INSERT INTO songs (title, artist, created_at) VALUES ('NUVOLE BIANCHE', 'Ludovico Einaudi', 0)",
+            [],
+        ).is_err());
     }
 }
