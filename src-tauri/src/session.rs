@@ -12,6 +12,10 @@ pub struct SessionInner {
     pub is_active: bool,
     pub start_ts: Option<i64>,
     pub last_midi_instant: Option<Instant>,
+    /// Wall-clock time (ms) of the last note-on. Unlike `Instant`, this keeps
+    /// moving while the machine sleeps, so it is what decides where a session
+    /// really ended.
+    pub last_note_ts: Option<i64>,
     pub midi_port_name: Option<String>,
     pub midi_connected: bool,
     pub midi_buffer: Vec<crate::db::MidiEventRecord>,
@@ -20,6 +24,9 @@ pub struct SessionInner {
     /// that comes from using start_ts (set by the debounce thread).
     pub midi_buffer_start: Option<Instant>,
 }
+
+/// Silence after the last note-on that ends a session.
+pub const SILENCE_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub type SharedSession = Arc<Mutex<SessionInner>>;
 pub type ForceReconnect = Arc<AtomicBool>;
@@ -126,19 +133,23 @@ pub fn start_midi_listener(
     let db_debounce = db.clone();
     let app_debounce = app_handle.clone();
     thread::spawn(move || {
-        let debounce = Duration::from_secs(10);
+        let debounce = SILENCE_TIMEOUT;
+        let debounce_ms = debounce.as_millis() as i64;
         loop {
             thread::sleep(Duration::from_millis(500));
 
-            let (should_start, should_end, start_ts_to_save, events_to_save) = {
+            let (should_start, should_end, start_ts_to_save, last_note_ts, events_to_save) = {
                 let mut s = session_for_debounce.lock().unwrap();
                 let should_start = !s.is_active
                     && s.last_midi_instant.is_some()
                     && s.midi_connected;
 
-                let should_end = s.is_active && s.last_midi_instant
-                    .map(|t| t.elapsed() > debounce)
-                    .unwrap_or(false);
+                // Check the wall clock too: the monotonic clock may not advance
+                // while the machine sleeps, which would delay the end after resume.
+                let should_end = s.is_active && (
+                    s.last_midi_instant.map(|t| t.elapsed() > debounce).unwrap_or(false)
+                    || s.last_note_ts.map(|t| now_ms() - t > debounce_ms).unwrap_or(false)
+                );
 
                 if should_start {
                     s.is_active = true;
@@ -148,6 +159,7 @@ pub fn start_midi_listener(
                 }
 
                 let start_ts_to_save = if should_end { s.start_ts } else { None };
+                let last_note_ts = if should_end { s.last_note_ts } else { None };
                 let events_to_save = if should_end {
                     let ev = s.midi_buffer.clone();
                     s.midi_buffer.clear();
@@ -160,9 +172,10 @@ pub fn start_midi_listener(
                     s.is_active = false;
                     s.start_ts = None;
                     s.last_midi_instant = None;
+                    s.last_note_ts = None;
                 }
 
-                (should_start, should_end, start_ts_to_save, events_to_save)
+                (should_start, should_end, start_ts_to_save, last_note_ts, events_to_save)
             };
 
             if should_start {
@@ -171,9 +184,17 @@ pub fn start_midi_listener(
 
             if should_end {
                 if let Some(start_ts) = start_ts_to_save {
-                    let end_ts = now_ms();
+                    // End at the last note plus the silence timeout, not "now":
+                    // after a sleep/resume, "now" can be hours past the last note.
+                    let end_ts = last_note_ts
+                        .map(|t| (t + debounce_ms).min(now_ms()))
+                        .unwrap_or_else(now_ms)
+                        .max(start_ts);
                     let duration_seconds = (end_ts - start_ts) / 1000;
-                    let date = Local::now().format("%Y-%m-%d").to_string();
+                    let date = chrono::DateTime::from_timestamp_millis(end_ts)
+                        .map(|t| t.with_timezone(&Local))
+                        .unwrap_or_else(Local::now)
+                        .format("%Y-%m-%d").to_string();
 
                     if duration_seconds >= 5 {
                         if let Ok(session_id) = db_debounce.insert_session(
@@ -279,9 +300,16 @@ fn try_connect_once(session: SharedSession, client_id: u32) -> Result<(midir::Mi
         let mut s = session.lock().unwrap();
         s.midi_connected = true;
         s.midi_port_name = Some(port_name.clone());
-        s.last_midi_instant = None;
-        s.midi_buffer.clear();
-        s.midi_buffer_start = None;
+        // If a session is still running (e.g. the keyboard dropped and came back
+        // after a sleep), keep its state so the debounce thread can end it.
+        // Clearing last_midi_instant here used to leave it active with nothing
+        // to time out on, so it only ended after the next note, hours later.
+        if !s.is_active {
+            s.last_midi_instant = None;
+            s.last_note_ts = None;
+            s.midi_buffer.clear();
+            s.midi_buffer_start = None;
+        }
     }
 
     let session_cb = session.clone();
@@ -300,6 +328,7 @@ fn try_connect_once(session: SharedSession, client_id: u32) -> Result<(midir::Mi
             let mut s = session_cb.lock().unwrap();
             if is_note_on {
                 s.last_midi_instant = Some(now);
+                s.last_note_ts = Some(now_ms());
             }
             // Use wall-clock delta from the very first buffered note as the
             // timing origin. This avoids the ≤500ms skew from start_ts, which
@@ -321,4 +350,22 @@ fn try_connect_once(session: SharedSession, client_id: u32) -> Result<(midir::Mi
     }, ())?;
 
     Ok((conn, port_name))
+}
+
+/// Daily cleanup: crop saved sessions that ran on long after the last note
+/// (see `Database::crop_runaway_sessions`). The first pass runs before the UI
+/// loads its data, then it repeats once per day.
+pub fn start_session_cropper(db: Arc<Database>) {
+    let silence_ms = SILENCE_TIMEOUT.as_millis() as i64;
+    let _ = db.crop_runaway_sessions(silence_ms);
+    thread::spawn(move || {
+        let mut last_run_date = Local::now().format("%Y-%m-%d").to_string();
+        loop {
+            thread::sleep(Duration::from_secs(3600));
+            let today = Local::now().format("%Y-%m-%d").to_string();
+            if today != last_run_date && db.crop_runaway_sessions(silence_ms).is_ok() {
+                last_run_date = today;
+            }
+        }
+    });
 }

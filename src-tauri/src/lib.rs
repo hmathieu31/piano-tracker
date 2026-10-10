@@ -10,7 +10,7 @@ use tauri::{
     Listener,
     Manager,
 };
-use session::{SharedSession, SessionInner, ForceReconnect, start_midi_listener};
+use session::{SharedSession, SessionInner, ForceReconnect, start_midi_listener, start_session_cropper};
 use commands::DbState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -32,6 +32,7 @@ pub fn run() {
                 is_active: false,
                 start_ts: None,
                 last_midi_instant: None,
+                last_note_ts: None,
                 midi_port_name: None,
                 midi_connected: false,
                 midi_buffer: Vec::new(),
@@ -46,6 +47,7 @@ pub fn run() {
 
             start_midi_listener(app.handle().clone(), db.clone(), session.clone(), force_reconnect);
             notifications::start_notification_scheduler(app.handle().clone(), db.clone());
+            start_session_cropper(db.clone());
 
             let open_item    = MenuItemBuilder::new("Open Dashboard").id("open").build(app)?;
             let restart_item = MenuItemBuilder::new("Restart").id("restart").build(app)?;

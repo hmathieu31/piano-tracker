@@ -1133,6 +1133,50 @@ impl Database {
         tx.commit()
     }
 
+    /// Crop sessions whose saved end is far past the last note actually played
+    /// (e.g. the laptop slept mid-session, so the end was only detected on resume).
+    /// The session is trimmed to its last note-on plus `silence_ms`, matching where
+    /// a normal session ends, and MIDI events past that point are dropped.
+    /// Sessions without recorded notes are left alone. Returns the number cropped.
+    pub fn crop_runaway_sessions(&self, silence_ms: i64) -> Result<usize, rusqlite::Error> {
+        // Normal sessions end at last note + silence (+ up to one 500ms debounce
+        // tick), so only touch sessions that overshoot by more than a minute.
+        const SLACK_MS: i64 = 60_000;
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let candidates: Vec<(i64, i64, i64)> = {
+            let mut stmt = tx.prepare(
+                "SELECT s.id, s.start_ts, MAX(m.relative_ms) FROM sessions s
+                 JOIN midi_events m ON m.session_id = s.id AND m.velocity > 0
+                 GROUP BY s.id
+                 HAVING s.end_ts > s.start_ts + MAX(m.relative_ms) + ?1"
+            )?;
+            let rows = stmt.query_map(params![silence_ms + SLACK_MS], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?;
+            rows.collect::<Result<_, _>>()?
+        };
+        for (id, start_ts, last_note_ms) in &candidates {
+            let cutoff_ms = last_note_ms + silence_ms;
+            let end_ts = start_ts + cutoff_ms;
+            let duration_seconds = cutoff_ms / 1000;
+            // Sessions are dated by their end, like when they are first saved.
+            let date = chrono::DateTime::from_timestamp_millis(end_ts)
+                .map(|t| t.with_timezone(&chrono::Local).format("%Y-%m-%d").to_string());
+            tx.execute(
+                "UPDATE sessions SET end_ts = ?1, duration_seconds = ?2, date = COALESCE(?3, date)
+                 WHERE id = ?4",
+                params![end_ts, duration_seconds, date, id],
+            )?;
+            tx.execute(
+                "DELETE FROM midi_events WHERE session_id = ?1 AND relative_ms > ?2",
+                params![id, cutoff_ms],
+            )?;
+        }
+        tx.commit()?;
+        Ok(candidates.len())
+    }
+
     pub fn get_midi_events(&self, session_id: i64) -> Result<Vec<MidiEventRecord>, rusqlite::Error> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -1148,5 +1192,49 @@ impl Database {
             })
         })?;
         rows.collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn note(relative_ms: i64, velocity: u8) -> MidiEventRecord {
+        MidiEventRecord { relative_ms, note: 60, velocity, channel: 0 }
+    }
+
+    fn session(db: &Database, id: i64) -> (i64, i64, i64) {
+        let conn = db.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT start_ts, end_ts, duration_seconds FROM sessions WHERE id = ?1",
+            params![id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        ).unwrap()
+    }
+
+    #[test]
+    fn crops_runaway_session_to_last_note_plus_silence() {
+        let db = Database::new(std::path::Path::new(":memory:")).unwrap();
+        db.init().unwrap();
+        let start = 1_700_000_000_000;
+        // Played for 10 minutes, then the session ran on for 10 hours.
+        let runaway = db.insert_session("2023-11-14", start, start + 36_000_000, 36_000).unwrap();
+        db.insert_midi_events(runaway, &[note(0, 80), note(600_000, 80), note(605_000, 0), note(700_000, 0)]).unwrap();
+        // A normal session ending 10.4s after its last note.
+        let normal = db.insert_session("2023-11-14", start, start + 130_400, 130).unwrap();
+        db.insert_midi_events(normal, &[note(0, 80), note(120_000, 80)]).unwrap();
+        // An old session recorded before MIDI capture existed.
+        let no_midi = db.insert_session("2023-11-14", start, start + 36_000_000, 36_000).unwrap();
+
+        assert_eq!(db.crop_runaway_sessions(10_000).unwrap(), 1);
+
+        assert_eq!(session(&db, runaway), (start, start + 610_000, 610));
+        let kept: Vec<i64> = db.get_midi_events(runaway).unwrap().iter().map(|e| e.relative_ms).collect();
+        assert_eq!(kept, vec![0, 600_000, 605_000]);
+        assert_eq!(session(&db, normal), (start, start + 130_400, 130));
+        assert_eq!(session(&db, no_midi), (start, start + 36_000_000, 36_000));
+
+        // Idempotent: a second run finds nothing left to crop.
+        assert_eq!(db.crop_runaway_sessions(10_000).unwrap(), 0);
     }
 }
