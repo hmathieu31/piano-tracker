@@ -5,6 +5,7 @@ mod notifications;
 mod practice;
 mod time;
 mod tray;
+mod updater;
 
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -30,6 +31,7 @@ pub fn run() {
             app.manage(db.clone() as DbState);
             app.manage(session.clone());
             app.manage(force_reconnect.clone());
+            app.manage(updater::PendingUpdate::default());
 
             practice::start_midi_listener(session.clone(), force_reconnect);
             practice::start_recorder(app.handle().clone(), db.clone(), session);
@@ -56,6 +58,9 @@ pub fn run() {
             commands::practice::link_session_song,
             commands::practice::unlink_session_song,
             commands::practice::tag_session,
+            // Updates
+            updater::check_for_update,
+            updater::install_update,
             // Song catalog and mastery
             commands::songs::create_song,
             commands::songs::update_song_genre,

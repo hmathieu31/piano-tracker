@@ -11,6 +11,16 @@ on:
         description: 'GitHub release ID to upload assets to'
         required: true
         type: string
+      version:
+        description: 'Overrides the app version before building (used for PR prereleases)'
+        required: false
+        type: string
+        default: ''
+      args:
+        description: 'Extra arguments passed to tauri build'
+        required: false
+        type: string
+        default: ''
     secrets:
       TAURI_SIGNING_PRIVATE_KEY:
         required: true
@@ -54,6 +64,14 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Set prerelease version
+        if: ${{ inputs.version != '' }}
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          node -e "const f='src-tauri/tauri.conf.json';const fs=require('fs');const c=JSON.parse(fs.readFileSync(f,'utf8'));c.version=process.env.VERSION;fs.writeFileSync(f,JSON.stringify(c,null,2)+'\n')"
+
       - name: Build Tauri app and upload to release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -63,3 +81,4 @@ jobs:
         with:
           releaseId: ${{ inputs.release_id }}
           updaterJsonPreferNsis: true
+          args: ${{ inputs.args }}
