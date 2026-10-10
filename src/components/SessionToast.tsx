@@ -162,9 +162,9 @@ export default function SessionToast({ sessionId, durationSeconds, unlocked, onC
 
       {searching && (
         <SongSearchModal
-          sessionId={sessionId}
+          title="What did you play?"
           recentSongs={recentSongs}
-          onAssigned={load}
+          onPick={tag}
           onClose={() => setSearching(false)}
         />
       )}

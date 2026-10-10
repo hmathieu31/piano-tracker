@@ -3,14 +3,10 @@ import { Modal, ModalContent, ModalHeader, ModalBody, Input, Image } from '@hero
 import { NavLink } from 'react-router-dom';
 import { useUpNext } from '../hooks/useData';
 import type { SongRecord } from '../types';
+import { daysSince } from '../utils';
 
 interface Props {
   songs: SongRecord[];
-}
-
-function daysSince(date: string | null): number | null {
-  if (!date) return null;
-  return Math.floor((Date.parse(new Date().toISOString().slice(0, 10)) - Date.parse(date)) / 86400000);
 }
 
 /** Why a song is suggested, and whether that reason is a nudge. */
@@ -132,7 +128,7 @@ export default function UpNext({ songs }: Props) {
                 ))}
                 {matches.length === 0 && (
                   <p className="text-sm text-foreground-400 text-center py-4">
-                    No match. <NavLink to="/repertoire" className="text-primary">Add it in Repertoire</NavLink>.
+                    No match. <NavLink to="/songs" className="text-primary">Add it in Songs</NavLink>.
                   </p>
                 )}
               </div>

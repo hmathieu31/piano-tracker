@@ -30,8 +30,20 @@ export function formatDateShort(dateStr: string): string {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
+/** A date as a local practice day (YYYY-MM-DD), matching `sessions.date`. */
+export function localDay(d: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDay();
+}
+
+/** Whole days from `date` (YYYY-MM-DD) to today; null without a date. */
+export function daysSince(date: string | null): number | null {
+  if (!date) return null;
+  return Math.round((Date.parse(todayStr() + 'T00:00:00') - Date.parse(date + 'T00:00:00')) / 86400000);
 }
 
 /** Spotify search link for a song; songs without an artist get none. */
