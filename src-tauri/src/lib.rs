@@ -2,6 +2,7 @@ mod db;
 mod session;
 mod commands;
 mod notifications;
+mod updater;
 
 use std::sync::Arc;
 use tauri::{
@@ -10,7 +11,7 @@ use tauri::{
     Listener,
     Manager,
 };
-use session::{SharedSession, SessionInner, ForceReconnect, start_midi_listener};
+use session::{SharedSession, SessionInner, ForceReconnect, start_midi_listener, start_session_cropper};
 use commands::DbState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -32,6 +33,7 @@ pub fn run() {
                 is_active: false,
                 start_ts: None,
                 last_midi_instant: None,
+                last_note_ts: None,
                 midi_port_name: None,
                 midi_connected: false,
                 midi_buffer: Vec::new(),
@@ -40,12 +42,14 @@ pub fn run() {
 
             app.manage(db.clone() as DbState);
             app.manage(session.clone());
+            app.manage(updater::PendingUpdate::default());
 
             let force_reconnect: ForceReconnect = Arc::new(std::sync::atomic::AtomicBool::new(false));
             app.manage(force_reconnect.clone());
 
             start_midi_listener(app.handle().clone(), db.clone(), session.clone(), force_reconnect);
             notifications::start_notification_scheduler(app.handle().clone(), db.clone());
+            start_session_cropper(db.clone());
 
             let open_item    = MenuItemBuilder::new("Open Dashboard").id("open").build(app)?;
             let restart_item = MenuItemBuilder::new("Restart").id("restart").build(app)?;
@@ -128,6 +132,9 @@ pub fn run() {
             commands::get_setting,
             commands::set_setting,
             commands::reconnect_midi,
+            // Updates
+            updater::check_for_update,
+            updater::install_update,
             // Song management
             commands::create_song,
             commands::update_song_genre,

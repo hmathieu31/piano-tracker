@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.8.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.7.0...piano-tracker-v1.8.0) (2026-10-10)
+
+
+### Features
+
+* build PR prereleases and add a prerelease update mode ([591cc1b](https://github.com/hmathieu31/piano-tracker/commit/591cc1b922c9468922989b7d5da51535aa3eb49a))
+* build PR prereleases and add a prerelease update mode ([69b4471](https://github.com/hmathieu31/piano-tracker/commit/69b44712ca4f9cd170e5f203745cfe78e5a6ddfe))
+
+
+### Bug Fixes
+
+* add missing difficulty field in row_to_session SongRecord initializer ([20d38c6](https://github.com/hmathieu31/piano-tracker/commit/20d38c623c1c79914ccca2f0e73a8a1313f09791))
+* end sessions at the last note and crop runaway sessions daily ([e539bd3](https://github.com/hmathieu31/piano-tracker/commit/e539bd3f553413d4ee8ba90ed7712bf77a99d1e8))
+* end sessions at the last note and crop runaway sessions daily ([9191ecc](https://github.com/hmathieu31/piano-tracker/commit/9191eccb5c3f8618143cd8258d4cb7965e442af9))
+
 ## [1.7.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.6.0...piano-tracker-v1.7.0) (2026-03-21)
 
 
