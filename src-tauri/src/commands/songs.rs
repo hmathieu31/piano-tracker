@@ -2,7 +2,7 @@
 
 use tauri::State;
 use super::{CommandResult, DbState};
-use crate::db::{NewSong, SongDetail, SongRecord};
+use crate::db::{MasterySuggestion, NewSong, SongDetail, SongRecord};
 
 /// Find or create a catalog song; returns its id. The arguments are the
 /// fields of the frontend's `invoke` call.
@@ -70,6 +70,12 @@ pub fn get_song_with_sessions(db: State<DbState>, song_id: i64) -> CommandResult
 #[tauri::command]
 pub fn set_song_status(db: State<DbState>, song_id: i64, status: String) -> CommandResult<()> {
     Ok(db.set_song_status(song_id, &status)?)
+}
+
+/// The next mastery stage this song is ready for, if any.
+#[tauri::command]
+pub fn get_mastery_suggestion(db: State<DbState>, song_id: i64) -> CommandResult<Option<MasterySuggestion>> {
+    Ok(db.mastery_suggestion(song_id)?)
 }
 
 /// Advance a song's mastery status after the user confirms a suggestion.

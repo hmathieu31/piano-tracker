@@ -1,5 +1,5 @@
 import { AreaChart, Area, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { FEELINGS } from './FeelingPicker';
+import { feelingInfo } from './FeelingPicker';
 
 interface DataPoint {
   date: string;
@@ -17,8 +17,8 @@ const CustomTooltip = ({ active, payload }: any) => {
   return (
     <div className="bg-[#252533] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs">
       <span className="text-slate-300 mr-1">{payload[0].payload.date}</span>
-      <span className="text-lg">{FEELINGS[f]?.emoji ?? f}</span>
-      <span className="text-slate-400 ml-1">{FEELINGS[f]?.label}</span>
+      <span className="text-lg">{feelingInfo(f)?.emoji ?? f}</span>
+      <span className="text-slate-400 ml-1">{feelingInfo(f)?.label}</span>
     </div>
   );
 };
@@ -47,7 +47,7 @@ export default function MoodTrendChart({ sessions, height = 80 }: Props) {
             <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <YAxis domain={[0, 4]} hide />
+        <YAxis domain={[1, 5]} hide />
         <Tooltip content={<CustomTooltip />} />
         <Area
           type="monotone"

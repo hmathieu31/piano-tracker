@@ -1,22 +1,25 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
+/** Session moods, stored 1 (rough) to 5 (great). */
 export const FEELINGS = [
-  { value: 0, emoji: '😞', label: 'Rough' },
-  { value: 1, emoji: '😐', label: 'Meh' },
-  { value: 2, emoji: '🙂', label: 'Okay' },
-  { value: 3, emoji: '😊', label: 'Good' },
-  { value: 4, emoji: '🤩', label: 'Great' },
+  { value: 1, emoji: '😞', label: 'Rough' },
+  { value: 2, emoji: '😐', label: 'Meh' },
+  { value: 3, emoji: '🙂', label: 'Okay' },
+  { value: 4, emoji: '😊', label: 'Good' },
+  { value: 5, emoji: '🤩', label: 'Great' },
 ];
 
+export function feelingInfo(value: number | null | undefined) {
+  return FEELINGS.find(f => f.value === value);
+}
+
 export function feelingEmoji(value: number | null | undefined): string {
-  if (value == null) return '·';
-  return FEELINGS[value]?.emoji ?? '·';
+  return feelingInfo(value)?.emoji ?? '·';
 }
 
 export function feelingLabel(value: number | null | undefined): string {
-  if (value == null) return '—';
-  return FEELINGS[value]?.label ?? '—';
+  return feelingInfo(value)?.label ?? '—';
 }
 
 interface Props {

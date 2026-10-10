@@ -1,27 +1,6 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { MasterySuggestion } from '../types';
-
-interface Props {
-  onSimulateSuggest: (suggestion: MasterySuggestion) => void;
-}
-
-const DEV_SUGGESTIONS: MasterySuggestion[] = [
-  {
-    song_id: -1,
-    song_title: 'Clair de Lune',
-    current_status: 'learning',
-    suggested_status: 'practicing',
-  },
-  {
-    song_id: -1,
-    song_title: 'Nocturne Op. 9 No. 2',
-    current_status: 'practicing',
-    suggested_status: 'mastered',
-  },
-];
-
-export default function DevToolbar({ onSimulateSuggest }: Props) {
+export default function DevToolbar() {
   const [open, setOpen] = useState(false);
   const [duration, setDuration] = useState(30);
   const [loading, setLoading] = useState(false);
@@ -79,24 +58,6 @@ export default function DevToolbar({ onSimulateSuggest }: Props) {
             >
               {loading ? '…' : '▶ Fire session-ended event'}
             </button>
-          </div>
-
-          {/* Simulate mastery suggestion */}
-          <div className="space-y-2">
-            <div className="text-slate-400">Simulate level-up prompt</div>
-            <div className="space-y-1">
-              {DEV_SUGGESTIONS.map((s, i) => (
-                <button
-                  key={i}
-                  onClick={() => { onSimulateSuggest(s); flash('✓ Level-up modal opened'); }}
-                  className="w-full flex items-center gap-2 py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 transition-all text-left"
-                >
-                  <span>🎖️</span>
-                  <span className="truncate">{s.song_title}</span>
-                  <span className="ml-auto text-[10px] text-slate-500 flex-shrink-0">{s.current_status} → {s.suggested_status}</span>
-                </button>
-              ))}
-            </div>
           </div>
 
           {msg && (

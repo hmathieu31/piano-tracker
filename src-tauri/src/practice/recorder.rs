@@ -88,6 +88,7 @@ fn save_session(app: &AppHandle, db: &Database, ended: Ended) {
     if !ended.events.is_empty() {
         let _ = db.insert_midi_events(session_id, &ended.events);
     }
+    let up_next = db.apply_up_next(session_id).ok().flatten();
 
     if let Ok(Some(record)) = db.get_session(session_id) {
         for key in db.check_and_unlock_achievements(&record).unwrap_or_default() {
@@ -96,18 +97,18 @@ fn save_session(app: &AppHandle, db: &Database, ended: Ended) {
     }
     let _ = app.emit("session-ended", SessionEndedPayload { session_id, duration_seconds });
 
-    // Toast when the app isn't in the foreground, so the user knows to open it
-    // and tag the session.
+    // Notify when the app isn't in the foreground: with the song it was
+    // tagged with, or asking the user to tag it.
     let focused = app.get_webview_window("main").is_some_and(|w| w.is_focused().unwrap_or(false));
     if !focused {
-        notify(
-            app,
-            "🎹 Practice session saved!",
-            &format!(
+        let body = match &up_next {
+            Some(song) => format!("{} of {}.", format_duration(duration_seconds), song.title),
+            None => format!(
                 "You practiced for {}. Open Piano Tracker to tag it with a song.",
                 format_duration(duration_seconds)
             ),
-        );
+        };
+        notify(app, "🎹 Practice session saved!", &body);
     }
 
     if let Ok(status) = db.get_goals_status() {
