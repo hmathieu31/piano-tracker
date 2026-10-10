@@ -9,7 +9,7 @@ import { useSessions } from '../hooks/useData';
 import { useSongs } from '../hooks/useSongs';
 import { useMidiEvents } from '../hooks/useSongs';
 import { SessionRecord, SongRecord } from '../types';
-import { formatDurationLong, formatTime, formatDate } from '../utils';
+import { formatDurationLong, formatTime, formatDate, spotifySearchUrl } from '../utils';
 import PianoRoll from '../components/PianoRoll';
 import SongSearchModal from '../components/SongSearchModal';
 import FeelingPicker from '../components/FeelingPicker';
@@ -124,11 +124,11 @@ function SessionDetailPanel({
                           {session.song.genre && <Chip size="sm" variant="flat" color="secondary" className="h-5 text-[10px]">{session.song.genre}</Chip>}
                           {session.song.album && <Chip size="sm" variant="flat" className="h-5 text-[10px] bg-content3 text-foreground-400">{session.song.album}</Chip>}
                           {session.song.year && <Chip size="sm" variant="flat" className="h-5 text-[10px] bg-content3 text-foreground-400">{session.song.year}</Chip>}
-                          {session.song.spotify_url && (
+                          {spotifySearchUrl(session.song) && (
                             <Chip
                               size="sm" variant="flat" color="success"
                               className="h-5 text-[10px] cursor-pointer hover:opacity-80"
-                              onClick={(e) => { e.stopPropagation(); openUrl(session.song!.spotify_url!); }}
+                              onClick={(e) => { e.stopPropagation(); openUrl(spotifySearchUrl(session.song!)!); }}
                             >🎧 Spotify</Chip>
                           )}
                         </div>

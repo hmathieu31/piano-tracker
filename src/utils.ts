@@ -33,3 +33,9 @@ export function formatDateShort(dateStr: string): string {
 export function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+/** Spotify search link for a song; songs without an artist get none. */
+export function spotifySearchUrl(song: { title: string; artist: string | null }): string | null {
+  if (!song.artist) return null;
+  return `spotify:search:${encodeURIComponent(`${song.title} ${song.artist}`)}`;
+}
