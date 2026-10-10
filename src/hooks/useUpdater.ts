@@ -1,12 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
-import { check, Update } from '@tauri-apps/plugin-updater';
+import { invoke, Channel } from '@tauri-apps/api/core';
 import { relaunch } from '@tauri-apps/plugin-process';
+
+export interface UpdateInfo {
+  version: string;
+  body: string | null;
+}
+
+type DownloadEvent =
+  | { event: 'Started'; data: { contentLength: number | null } }
+  | { event: 'Progress'; data: { chunkLength: number } }
+  | { event: 'Finished' };
+
+export const PRERELEASE_SETTING = 'prerelease_updates';
 
 export type UpdaterState =
   | { phase: 'idle' }
   | { phase: 'checking' }
   | { phase: 'up-to-date' }
-  | { phase: 'available'; update: Update }
+  | { phase: 'available'; update: UpdateInfo }
   | { phase: 'downloading'; progress: number }
   | { phase: 'error'; message: string };
 
@@ -18,7 +30,8 @@ export function useUpdater() {
   const checkForUpdates = useCallback(async (silent = false) => {
     setState({ phase: 'checking' });
     try {
-      const update = await check();
+      const prerelease = (await invoke<string | null>('get_setting', { key: PRERELEASE_SETTING })) === 'true';
+      const update = await invoke<UpdateInfo | null>('check_for_update', { prerelease });
       if (update) {
         setState({ phase: 'available', update });
       } else {
@@ -36,17 +49,18 @@ export function useUpdater() {
 
   const installUpdate = useCallback(async () => {
     if (state.phase !== 'available') return;
-    const { update } = state;
     let downloaded = 0, total = 0;
     setState({ phase: 'downloading', progress: 0 });
     try {
-      await update.downloadAndInstall((event) => {
+      const onEvent = new Channel<DownloadEvent>();
+      onEvent.onmessage = (event) => {
         if (event.event === 'Started') total = event.data.contentLength ?? 0;
         if (event.event === 'Progress') {
           downloaded += event.data.chunkLength;
           setState({ phase: 'downloading', progress: total > 0 ? Math.round((downloaded / total) * 100) : 0 });
         }
-      });
+      };
+      await invoke('install_update', { onEvent });
       await relaunch();
     } catch (e) {
       setState({ phase: 'error', message: String(e) });

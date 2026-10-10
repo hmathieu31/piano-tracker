@@ -1,0 +1,130 @@
+name: PR Prerelease
+
+# Builds a signed Windows prerelease for every push to a PR, so it can be installed on the
+# piano laptop through the app's "Prerelease updates" setting. Each PR keeps one release
+# (tag pr-<number>) that is replaced on every push, and the prerelease-channel release holds
+# the latest.json of the most recent PR build, which is what the app's prerelease check reads.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr-prerelease-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  PR_TAG: pr-${{ github.event.pull_request.number }}
+  CHANNEL_TAG: prerelease-channel
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  prepare:
+    # Fork PRs get no signing key, and release-please PRs would outrank the release they prepare
+    if: >-
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !startsWith(github.head_ref, 'release-please--')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release_id: ${{ steps.release.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # Next patch version with a build counter, e.g. 1.7.1-pr.57. It sorts above the
+      # installed stable release, below the release that ships the PR, and the run number
+      # keeps it increasing across pushes and across PRs.
+      - name: Compute prerelease version
+        id: version
+        run: |
+          base=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          IFS=. read -r major minor patch <<< "${base%%-*}"
+          echo "version=$major.$minor.$((patch + 1))-pr.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Replace the PR's prerelease
+        id: release
+        uses: actions/github-script@v7
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const tag = process.env.PR_TAG;
+            const pr = context.payload.pull_request;
+            try {
+              const { data } = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              await github.rest.repos.deleteRelease({ owner, repo, release_id: data.id });
+            } catch (e) {
+              if (e.status !== 404) throw e;
+            }
+            try {
+              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
+            } catch (e) {
+              if (e.status !== 404 && e.status !== 422) throw e;
+            }
+            const { data } = await github.rest.repos.createRelease({
+              owner,
+              repo,
+              tag_name: tag,
+              target_commitish: process.env.SHA,
+              name: `PR #${pr.number} preview (v${process.env.VERSION})`,
+              body: `Test build of #${pr.number}: ${pr.title}\n\nBuilt from ${process.env.SHA.slice(0, 7)}. Install it from the app with Settings > Prerelease updates.`,
+              prerelease: true,
+              make_latest: 'false',
+            });
+            core.setOutput('release_id', String(data.id));
+
+  build:
+    needs: prepare
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      tag: pr-${{ github.event.pull_request.number }}
+      release_id: ${{ needs.prepare.outputs.release_id }}
+      version: ${{ needs.prepare.outputs.version }}
+      # MSI only accepts numeric prerelease versions, and the updater uses the NSIS installer
+      args: --bundles nsis
+    secrets:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+  publish-channel:
+    needs: build
+    runs-on: ubuntu-latest
+    concurrency: prerelease-channel
+    steps:
+      - name: Point the prerelease channel at this build
+        run: |
+          gh release download "$PR_TAG" --pattern latest.json --dir build
+          if ! gh release view "$CHANNEL_TAG" > /dev/null 2>&1; then
+            gh release create "$CHANNEL_TAG" --prerelease --latest=false \
+              --target "${{ github.event.repository.default_branch }}" \
+              --title "Prerelease channel" \
+              --notes "Holds the latest.json of the most recent PR build for the app's prerelease updates. Managed by the PR Prerelease workflow."
+          fi
+          gh release upload "$CHANNEL_TAG" build/latest.json --clobber
+
+  cleanup:
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    concurrency: prerelease-channel
+    steps:
+      - name: Delete the PR's prerelease
+        run: |
+          # Stop offering this build if the channel still points at it; the app then falls back to stable
+          if gh release download "$CHANNEL_TAG" --pattern latest.json --dir channel 2> /dev/null \
+            && grep -q "/download/$PR_TAG/" channel/latest.json; then
+            gh release delete-asset "$CHANNEL_TAG" latest.json --yes
+          fi
+          if gh release view "$PR_TAG" > /dev/null 2>&1; then
+            gh release delete "$PR_TAG" --cleanup-tag --yes
+          fi
