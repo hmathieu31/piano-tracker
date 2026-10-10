@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.8.0...piano-tracker-v1.9.0) (2026-10-10)
+
+
+### Features
+
+* relational data model v2 (artists, genres, albums) ([be6115f](https://github.com/hmathieu31/piano-tracker/commit/be6115ffb9f3a58bab3790e31ca4e3928ffab5fd))
+
 ## [1.8.0](https://github.com/hmathieu31/piano-tracker/compare/piano-tracker-v1.7.0...piano-tracker-v1.8.0) (2026-10-10)
 
 
