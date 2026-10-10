@@ -8,13 +8,15 @@ import { searchRecordings, type MBSearchResult } from '../api/musicSearch';
 import type { SongRecord } from '../types';
 
 interface Props {
-  sessionId: number;
+  title: string;
+  subtitle?: string;
   recentSongs: SongRecord[];
-  onAssigned: () => void;
+  /** Called with the picked song's id, created in the catalog if it is new. */
+  onPick: (songId: number) => void | Promise<void>;
   onClose: () => void;
 }
 
-export default function SongSearchModal({ sessionId, recentSongs, onAssigned, onClose }: Props) {
+export default function SongSearchModal({ title, subtitle = 'Search for a song or pick from recent', recentSongs, onPick, onClose }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<MBSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -57,8 +59,7 @@ export default function SongSearchModal({ sessionId, recentSongs, onAssigned, on
         itunesTrackId: result.recordingId,
         difficulty: null,
       });
-      await invoke('link_session_song', { sessionId, songId });
-      onAssigned();
+      await onPick(songId);
       onClose();
     } catch {
       setError('Failed to save song. Please try again.');
@@ -70,8 +71,7 @@ export default function SongSearchModal({ sessionId, recentSongs, onAssigned, on
   const assignRecentSong = async (song: SongRecord) => {
     setSaving(true);
     try {
-      await invoke('link_session_song', { sessionId, songId: song.id });
-      onAssigned();
+      await onPick(song.id);
       onClose();
     } catch {
       setError('Failed to assign song.');
@@ -89,8 +89,7 @@ export default function SongSearchModal({ sessionId, recentSongs, onAssigned, on
         artist: null, genre: null, album: null, year: null,
         coverUrl: null, itunesTrackId: null, difficulty: null,
       });
-      await invoke('link_session_song', { sessionId, songId });
-      onAssigned();
+      await onPick(songId);
       onClose();
     } catch {
       setError('Failed to save song.');
@@ -113,8 +112,8 @@ export default function SongSearchModal({ sessionId, recentSongs, onAssigned, on
     >
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
-          <span className="text-base font-semibold">Tag this session</span>
-          <span className="text-xs text-foreground-400 font-normal">Search for a song or pick from recent</span>
+          <span className="text-base font-semibold">{title}</span>
+          <span className="text-xs text-foreground-400 font-normal">{subtitle}</span>
         </ModalHeader>
         <ModalBody>
           <Tabs

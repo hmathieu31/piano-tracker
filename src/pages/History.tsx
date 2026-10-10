@@ -1,515 +1,224 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
-import {
-  Tabs, Tab, Card, CardBody, Button, Chip, Modal, ModalContent,
-  ModalHeader, ModalBody, Image, Spinner,
-} from '@heroui/react';
-import { useSessions } from '../hooks/useData';
-import { useSongs } from '../hooks/useSongs';
-import { useMidiEvents } from '../hooks/useSongs';
-import { SessionRecord, SongRecord } from '../types';
-import { formatDurationLong, formatTime, formatDate, spotifySearchUrl } from '../utils';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import { useSessions, useGoalsStatus, useStreak, useInsights, useAchievements } from '../hooks/useData';
+import { useMidiEvents, useRecentSongs } from '../hooks/useSongs';
+import { formatDurationLong, formatTime, localDay, todayStr } from '../utils';
+import FeelingPicker from '../components/FeelingPicker';
 import PianoRoll from '../components/PianoRoll';
 import SongSearchModal from '../components/SongSearchModal';
-import FeelingPicker from '../components/FeelingPicker';
+import type { SessionRecord, SongRecord } from '../types';
 
-// ── Session Detail Panel ─────────────────────────────────────────────────────
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-function SessionDetailPanel({
-  session,
-  onClose,
-  onUpdate,
-}: {
-  session: SessionRecord;
-  onClose: () => void;
-  onUpdate: () => void;
-}) {
-  const { data: events, loading: eventsLoading } = useMidiEvents(session.id);
-  const [showSongModal, setShowSongModal] = useState(false);
-  const [note, setNote] = useState(session.note ?? '');
-  const [editingNote, setEditingNote] = useState(false);
-  const [savingNote, setSavingNote] = useState(false);
-  const [exportingMidi, setExportingMidi] = useState(false);
-
-  const songName = session.song?.title;
-
-  const saveNote = async () => {
-    setSavingNote(true);
-    try {
-      await invoke('update_session_note', { id: session.id, note });
-      setEditingNote(false);
-      onUpdate();
-    } finally {
-      setSavingNote(false);
-    }
-  };
-
-  const exportMidi = async () => {
-    setExportingMidi(true);
-    try {
-      const path = await invoke<string>('save_midi_file', {
-        sessionId: session.id,
-        date: session.date,
-        songName,
-      });
-      await revealItemInDir(path);
-    } catch (e) {
-      console.error('MIDI export failed', e);
-    } finally {
-      setExportingMidi(false);
-    }
-  };
-
-  const unlinkSong = async () => {
-    try {
-      await invoke('unlink_session_song', { sessionId: session.id });
-      onUpdate();
-    } catch {}
-  };
-
-  const durationMs = (session.end_ts - session.start_ts);
-
-  return (
-    <Modal
-      isOpen
-      onClose={onClose}
-      size="2xl"
-      scrollBehavior="inside"
-      classNames={{
-        backdrop: 'bg-black/70',
-        base: 'bg-content1 border border-white/8',
-        header: 'border-b border-divider py-3',
-        body: 'py-5',
-      }}
-    >
-      <ModalContent>
-        <ModalHeader>
-          <div className="flex items-center justify-between w-full pr-2">
-            <div>
-              <div className="text-base font-semibold text-foreground">{formatDate(session.date)}</div>
-              <div className="text-xs text-foreground-400">{formatTime(session.start_ts)} → {formatTime(session.end_ts)}</div>
-            </div>
-            <Chip color="primary" variant="flat" size="sm" className="font-semibold">{formatDurationLong(session.duration_seconds)}</Chip>
-          </div>
-        </ModalHeader>
-        <ModalBody>
-          {showSongModal && (
-            <SongSearchModal
-              sessionId={session.id}
-              recentSongs={[]}
-              onAssigned={onUpdate}
-              onClose={() => setShowSongModal(false)}
-            />
-          )}
-
-          <div className="space-y-6">
-            {/* Song card */}
-            <div>
-              <p className="text-xs font-medium text-foreground-400 uppercase tracking-wide mb-2">Song</p>
-              {session.song ? (
-                <Card classNames={{ base: 'bg-content2 border border-divider' }}>
-                  <CardBody className="p-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-14 h-14 rounded-xl overflow-hidden bg-content3 flex-shrink-0">
-                        {session.song.cover_url
-                          ? <Image src={session.song.cover_url} alt={session.song.title} className="w-14 h-14 object-cover" removeWrapper />
-                          : <div className="w-14 h-14 flex items-center justify-center text-2xl">🎵</div>
-                        }
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-foreground truncate">{session.song.title}</div>
-                        {session.song.artist && <div className="text-xs text-foreground-400 truncate">{session.song.artist}</div>}
-                        <div className="flex flex-wrap gap-1.5 mt-1.5">
-                          {session.song.genre && <Chip size="sm" variant="flat" color="secondary" className="h-5 text-[10px]">{session.song.genre}</Chip>}
-                          {session.song.album && <Chip size="sm" variant="flat" className="h-5 text-[10px] bg-content3 text-foreground-400">{session.song.album}</Chip>}
-                          {session.song.year && <Chip size="sm" variant="flat" className="h-5 text-[10px] bg-content3 text-foreground-400">{session.song.year}</Chip>}
-                          {spotifySearchUrl(session.song) && (
-                            <Chip
-                              size="sm" variant="flat" color="success"
-                              className="h-5 text-[10px] cursor-pointer hover:opacity-80"
-                              onClick={(e) => { e.stopPropagation(); openUrl(spotifySearchUrl(session.song!)!); }}
-                            >🎧 Spotify</Chip>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-1 flex-shrink-0">
-                        <Button size="sm" variant="light" onPress={() => setShowSongModal(true)} className="text-foreground-400 h-7 min-w-unit-16">Change</Button>
-                        <Button size="sm" variant="light" color="danger" onPress={unlinkSong} className="h-7 min-w-unit-16">Remove</Button>
-                      </div>
-                    </div>
-                  </CardBody>
-                </Card>
-              ) : (
-                <button
-                  onClick={() => setShowSongModal(true)}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-dashed border-white/10 hover:border-primary/30 text-sm text-foreground-500 hover:text-foreground transition-colors"
-                >
-                  <span className="text-lg">🎵</span>
-                  Tag this session with a song…
-                </button>
-              )}
-            </div>
-
-            {/* Piano Roll */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-medium text-foreground-400 uppercase tracking-wide">Piano Roll</p>
-                {events.length > 0 && (
-                  <Button size="sm" variant="flat" color="primary" onPress={exportMidi} isLoading={exportingMidi} className="h-7 text-xs">
-                    ⬇ Export .mid
-                  </Button>
-                )}
-              </div>
-              {eventsLoading ? (
-                <div className="h-32 flex items-center justify-center"><Spinner color="primary" /></div>
-              ) : events.length === 0 ? (
-                <Card classNames={{ base: 'bg-content2 border border-divider' }}>
-                  <CardBody className="h-24 flex items-center justify-center text-foreground-500 text-sm">No MIDI events recorded</CardBody>
-                </Card>
-              ) : (
-                <PianoRoll events={events} durationMs={durationMs} />
-              )}
-            </div>
-
-            {/* How did it feel? */}
-            <div>
-              <p className="text-xs font-medium text-foreground-400 uppercase tracking-wide mb-2">How did it feel?</p>
-              <FeelingPicker
-                sessionId={session.id}
-                value={session.feeling}
-                onChange={onUpdate}
-              />
-            </div>
-
-            {/* Practice Note */}
-            <div>
-              <p className="text-xs font-medium text-foreground-400 uppercase tracking-wide mb-2">Practice Note</p>
-              {editingNote ? (
-                <div className="flex gap-2">
-                  <input
-                    autoFocus
-                    className="flex-1 bg-content3 border border-divider rounded-xl px-3 py-2 text-sm text-foreground placeholder-foreground-500 focus:outline-none focus:border-primary/50"
-                    value={note}
-                    onChange={e => setNote(e.target.value)}
-                    placeholder="What did you practice?"
-                    onKeyDown={e => { if (e.key === 'Enter') saveNote(); if (e.key === 'Escape') setEditingNote(false); }}
-                  />
-                  <Button color="primary" size="sm" onPress={saveNote} isLoading={savingNote}>Save</Button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setEditingNote(true)}
-                  className="w-full text-left p-3 rounded-xl bg-content2 border border-divider hover:border-white/15 transition-colors"
-                >
-                  {session.note
-                    ? <span className="text-sm text-foreground-300 italic">"{session.note}"</span>
-                    : <span className="text-sm text-foreground-500">+ Add a practice note…</span>
-                  }
-                </button>
-              )}
-            </div>
-          </div>
-        </ModalBody>
-      </ModalContent>
-    </Modal>
-  );
-}
-
-// ── Session Row ──────────────────────────────────────────────────────────────
-
-function SessionRow({ session, onUpdate }: { session: SessionRecord; onUpdate: () => void }) {
-  const [showDetail, setShowDetail] = useState(false);
-
-  return (
-    <>
-      {showDetail && (
-        <SessionDetailPanel
-          session={session}
-          onClose={() => setShowDetail(false)}
-          onUpdate={onUpdate}
-        />
-      )}
-      <Card
-        isPressable
-        onPress={() => setShowDetail(true)}
-        classNames={{ base: 'bg-content2 border border-white/5 hover:border-white/10 w-full', body: 'p-4' }}
-      >
-        <CardBody>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 bg-content3">
-              {session.song?.cover_url
-                ? <Image src={session.song.cover_url} alt={session.song.title ?? ''} className="w-10 h-10 object-cover" removeWrapper />
-                : <div className={`w-10 h-10 flex items-center justify-center ${session.song ? 'text-secondary' : 'text-primary/40'} text-lg`}>
-                    {session.song ? '🎵' : '🎹'}
-                  </div>
-              }
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-medium text-foreground">{formatDate(session.date)}</span>
-                {session.song && (
-                  <Chip size="sm" variant="flat" color="secondary" className="h-5 text-[10px]">{session.song.title}</Chip>
-                )}
-              </div>
-              <div className="text-xs text-foreground-400 mt-0.5">
-                {formatTime(session.start_ts)} → {formatTime(session.end_ts)}
-                {session.song?.artist && <span className="ml-2 text-foreground-500">· {session.song.artist}</span>}
-              </div>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <div className="text-primary font-semibold text-sm">{formatDurationLong(session.duration_seconds)}</div>
-              <div className="text-[10px] text-foreground-500 mt-0.5">details →</div>
-            </div>
-          </div>
-          {session.note && (
-            <div className="mt-2 text-xs text-foreground-400 italic pl-14">"{session.note}"</div>
-          )}
-        </CardBody>
-      </Card>
-    </>
-  );
-}
-
-// ── By Song tab ──────────────────────────────────────────────────────────────
-
-function BySongTab({ songs }: { songs: SongRecord[] }) {
-  if (songs.length === 0) {
-    return <EmptyState label="No songs tagged yet. Tag a session to see them here." />;
+/** The days shown for a month: whole Monday-to-Sunday weeks around it. */
+function monthGrid(year: number, month: number): Date[] {
+  const first = new Date(year, month, 1);
+  const start = new Date(year, month, 1 - ((first.getDay() + 6) % 7));
+  const last = new Date(year, month + 1, 0);
+  const days: Date[] = [];
+  for (let d = start; d <= last || days.length % 7 !== 0; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+    days.push(d);
   }
-  return (
-    <div className="space-y-3">
-      {songs.map(song => (
-        <Card key={song.id} classNames={{ base: 'bg-content2 border border-divider', body: 'p-3' }}>
-          <CardBody>
-            <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-xl overflow-hidden bg-content3 flex-shrink-0">
-                {song.cover_url
-                  ? <Image src={song.cover_url} alt={song.title} className="w-14 h-14 object-cover" removeWrapper />
-                  : <div className="w-14 h-14 flex items-center justify-center text-2xl">🎵</div>
-                }
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-foreground truncate">{song.title}</div>
-                <div className="text-xs text-foreground-400 truncate">{song.artist ?? 'Unknown Artist'}</div>
-                <div className="flex flex-wrap gap-1.5 mt-1.5">
-                  {song.genre && <Chip size="sm" variant="flat" color="secondary" className="h-5 text-[10px]">{song.genre}</Chip>}
-                  {song.album && <Chip size="sm" variant="flat" className="h-5 text-[10px] bg-content3 text-foreground-400">{song.album}</Chip>}
-                </div>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <div className="text-primary font-semibold text-sm">{formatDurationLong(song.total_seconds ?? 0)}</div>
-                <div className="text-xs text-foreground-500 mt-0.5">
-                  {song.session_count ?? 0} session{song.session_count !== 1 ? 's' : ''}
-                </div>
-                {song.last_played_date && (
-                  <div className="text-[10px] text-foreground-500 mt-0.5">Last: {song.last_played_date}</div>
-                )}
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-      ))}
-    </div>
-  );
+  return days;
 }
 
-// ── By Artist tab ────────────────────────────────────────────────────────────
+function SessionCard({ session, recentSongs, onChange }: { session: SessionRecord; recentSongs: SongRecord[]; onChange: () => void }) {
+  const [searching, setSearching] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const [editingNote, setEditingNote] = useState(false);
+  const [note, setNote] = useState(session.note ?? '');
+  const [exportError, setExportError] = useState(false);
+  const { data: events, loading } = useMidiEvents(showNotes ? session.id : null);
 
-interface ArtistGroup {
-  artist: string;
-  totalSeconds: number;
-  sessionCount: number;
-  songs: SongRecord[];
-}
-
-function ByArtistTab({ songs }: { songs: SongRecord[] }) {
-  const groups: ArtistGroup[] = Object.values(
-    songs.reduce((acc, s) => {
-      const key = s.artist ?? 'Unknown Artist';
-      if (!acc[key]) acc[key] = { artist: key, totalSeconds: 0, sessionCount: 0, songs: [] };
-      acc[key].totalSeconds += s.total_seconds ?? 0;
-      acc[key].sessionCount += s.session_count ?? 0;
-      acc[key].songs.push(s);
-      return acc;
-    }, {} as Record<string, ArtistGroup>)
-  ).sort((a, b) => b.totalSeconds - a.totalSeconds);
-
-  if (groups.length === 0) return <EmptyState label="No artists yet. Tag sessions with songs to see them grouped by artist." />;
-
-  return (
-    <div className="space-y-4">
-      {groups.map(g => (
-        <Card key={g.artist} classNames={{ base: 'bg-content2 border border-divider', body: 'p-0' }}>
-          <CardBody>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-divider">
-              <div className="font-medium text-foreground text-sm">{g.artist}</div>
-              <div className="text-xs text-foreground-400">{formatDurationLong(g.totalSeconds)} · {g.sessionCount} sessions</div>
-            </div>
-            <div className="p-3 flex flex-wrap gap-2">
-              {g.songs.map(s => (
-                <div key={s.id} className="flex items-center gap-2 px-2.5 py-1 bg-content3 rounded-lg text-xs text-foreground-300">
-                  {s.cover_url && (
-                    <Image src={s.cover_url} alt="" className="w-4 h-4 rounded object-cover" removeWrapper />
-                  )}
-                  {s.title}
-                </div>
-              ))}
-            </div>
-          </CardBody>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-// ── By Genre tab ─────────────────────────────────────────────────────────────
-
-interface GenreGroup {
-  genre: string;
-  totalSeconds: number;
-  sessionCount: number;
-  songs: SongRecord[];
-}
-
-function ByGenreTab({ songs }: { songs: SongRecord[] }) {
-  const groups: GenreGroup[] = Object.values(
-    songs.reduce((acc, s) => {
-      const key = s.genre ?? 'Unclassified';
-      if (!acc[key]) acc[key] = { genre: key, totalSeconds: 0, sessionCount: 0, songs: [] };
-      acc[key].totalSeconds += s.total_seconds ?? 0;
-      acc[key].sessionCount += s.session_count ?? 0;
-      acc[key].songs.push(s);
-      return acc;
-    }, {} as Record<string, GenreGroup>)
-  ).sort((a, b) => b.totalSeconds - a.totalSeconds);
-
-  if (groups.length === 0) return <EmptyState label="No genres yet. Songs with genre data will appear here." />;
-
-  const GENRE_CHIP_COLOR: Record<string, 'warning' | 'primary' | 'danger' | 'success' | 'secondary' | 'default'> = {
-    classical: 'warning',
-    jazz: 'primary',
-    pop: 'danger',
-    rock: 'danger',
-    electronic: 'secondary',
+  const tag = async (songId: number) => {
+    await invoke('link_session_song', { sessionId: session.id, songId }).catch(() => {});
+    onChange();
   };
-
-  const colorFor = (genre: string) => GENRE_CHIP_COLOR[genre.toLowerCase()] ?? 'secondary';
+  const saveNote = async () => {
+    await invoke('update_session_note', { id: session.id, note }).catch(() => {});
+    setEditingNote(false);
+    onChange();
+  };
+  const exportMidi = async () => {
+    setExportError(false);
+    try {
+      const path = await invoke<string>('save_midi_file', { sessionId: session.id, date: session.date, songName: session.song?.title });
+      await revealItemInDir(path);
+    } catch {
+      setExportError(true);
+    }
+  };
+  const action = 'h-7 px-2.5 rounded-lg border border-white/10 bg-content3 hover:bg-content4 text-xs text-foreground-300';
 
   return (
-    <div className="space-y-4">
-      {groups.map(g => (
-        <Card key={g.genre} classNames={{ base: 'bg-content2 border border-divider', body: 'p-4' }}>
-          <CardBody>
-            <div className="flex items-center justify-between mb-3">
-              <Chip size="sm" variant="flat" color={colorFor(g.genre)} className="font-medium">{g.genre}</Chip>
-              <span className="text-xs text-foreground-400">{formatDurationLong(g.totalSeconds)} · {g.sessionCount} sessions</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {g.songs.map(s => (
-                <div key={s.id} className="flex items-center gap-1.5 px-2.5 py-1 bg-content3 rounded-lg text-xs text-foreground-300">
-                  {s.cover_url && (
-                    <Image src={s.cover_url} alt="" className="w-4 h-4 rounded object-cover" removeWrapper />
-                  )}
-                  <span className="truncate max-w-[120px]">{s.title}</span>
-                </div>
-              ))}
-            </div>
-          </CardBody>
-        </Card>
-      ))}
+    <div className="p-4 rounded-2xl bg-content2 border border-divider flex flex-col gap-3">
+      <div className="flex justify-between items-center gap-3">
+        <div className="min-w-0">
+          <div className={`text-sm font-medium truncate ${session.song ? 'text-foreground' : 'text-foreground-400'}`}>
+            {session.song?.title ?? 'Warm-up or untagged'}
+          </div>
+          <div className="text-xs text-foreground-500 mt-0.5">{formatTime(session.start_ts)} · {formatDurationLong(session.duration_seconds)}</div>
+        </div>
+        <FeelingPicker sessionId={session.id} value={session.feeling} onChange={onChange} size="sm" />
+      </div>
+      {editingNote ? (
+        <div className="flex gap-2">
+          <input
+            autoFocus
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') saveNote(); if (e.key === 'Escape') setEditingNote(false); }}
+            placeholder="What did you work on?"
+            className="flex-1 h-8 px-2.5 rounded-lg bg-content3 border border-white/10 text-sm outline-none focus:border-primary/50"
+          />
+          <button onClick={saveNote} className="h-8 px-3 rounded-lg bg-primary text-white text-xs">Save</button>
+        </div>
+      ) : session.note ? (
+        <button onClick={() => setEditingNote(true)} className="text-left text-xs italic text-foreground-400">"{session.note}"</button>
+      ) : null}
+      <div className="flex flex-wrap gap-1.5">
+        <button onClick={() => setSearching(true)} className={action}>Change song</button>
+        {!session.note && !editingNote && <button onClick={() => setEditingNote(true)} className={action}>Add note</button>}
+        <button onClick={() => setShowNotes(v => !v)} className={action}>{showNotes ? 'Hide notes played' : 'Notes played'}</button>
+        <button onClick={exportMidi} className={action}>Export MIDI</button>
+        {session.song && (
+          <button onClick={async () => { await invoke('unlink_session_song', { sessionId: session.id }).catch(() => {}); onChange(); }} className={`${action} text-foreground-500`}>
+            Mark as warm-up
+          </button>
+        )}
+      </div>
+      {exportError && <div className="text-xs text-danger">Export failed. Check the save folder in Settings.</div>}
+      {showNotes && (loading
+        ? <div className="text-xs text-foreground-500">Loading…</div>
+        : events.length === 0
+          ? <div className="text-xs text-foreground-500">No notes were recorded for this session.</div>
+          : <PianoRoll events={events} durationMs={session.end_ts - session.start_ts} />)}
+      {searching && (
+        <SongSearchModal title="What did you play?" recentSongs={recentSongs} onPick={tag} onClose={() => setSearching(false)} />
+      )}
     </div>
   );
 }
-
-// ── Empty State ───────────────────────────────────────────────────────────────
-
-function EmptyState({ label }: { label: string }) {
-  return (
-    <div className="text-center py-20 text-foreground-500">
-      <div className="text-4xl mb-3">🎹</div>
-      <div className="text-sm max-w-xs mx-auto">{label}</div>
-    </div>
-  );
-}
-
-// ── Main History Page ─────────────────────────────────────────────────────────
 
 export default function History() {
-  const { data: sessions, refresh } = useSessions(500);
-  const { data: songs } = useSongs();
+  const { data: sessions, refresh } = useSessions(10000);
+  const { data: goals } = useGoalsStatus();
+  const { data: recentSongs } = useRecentSongs(6);
+  const streak = useStreak();
+  const insights = useInsights();
+  const { data: achievements } = useAchievements();
+  const now = new Date();
+  const [month, setMonth] = useState({ year: now.getFullYear(), month: now.getMonth() });
+  const [selected, setSelected] = useState(todayStr());
 
-  // Group timeline sessions by month
-  const grouped = sessions.reduce((acc, s) => {
-    const month = s.date.slice(0, 7);
-    if (!acc[month]) acc[month] = [];
-    acc[month].push(s);
-    return acc;
-  }, {} as Record<string, SessionRecord[]>);
-  const months = Object.keys(grouped).sort().reverse();
+  const goalSeconds = (goals?.config.daily_minutes ?? 30) * 60;
+  const byDay = new Map<string, SessionRecord[]>();
+  for (const s of sessions) byDay.set(s.date, [...(byDay.get(s.date) ?? []), s]);
+  const total = (day: string) => (byDay.get(day) ?? []).reduce((a, s) => a + s.duration_seconds, 0);
+
+  const prefix = `${month.year}-${String(month.month + 1).padStart(2, '0')}`;
+  const monthSessions = sessions.filter(s => s.date.startsWith(prefix));
+  const monthSeconds = monthSessions.reduce((a, s) => a + s.duration_seconds, 0);
+  const monthDays = [...new Set(monthSessions.map(s => s.date))];
+  const daysAtGoal = monthDays.filter(d => total(d) >= goalSeconds).length;
+  const songTime = new Map<string, number>();
+  for (const s of monthSessions) if (s.song) songTime.set(s.song.title, (songTime.get(s.song.title) ?? 0) + s.duration_seconds);
+  const mostPlayed = [...songTime.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  const today = todayStr();
+  const shift = (by: number) => setMonth(m => {
+    const d = new Date(m.year, m.month + by, 1);
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+  const daySessions = [...(byDay.get(selected) ?? [])].sort((a, b) => a.start_ts - b.start_ts);
+  const unlockedCount = achievements.filter(a => a.unlocked_at != null).length;
+  const navBtn = 'w-8 h-8 rounded-lg border border-white/10 bg-content2 hover:bg-content3 text-foreground-300';
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 fade-in">
-      {/* Header */}
-      <div className="mb-5">
-        <h1 className="text-2xl font-semibold text-foreground">History</h1>
-        <p className="text-foreground-400 text-sm mt-1">
-          {sessions.length} sessions · {songs.length} songs tagged
-        </p>
-      </div>
+    <div className="p-8 flex flex-wrap gap-8 fade-in">
+      <section className="flex-1 min-w-[560px] flex flex-col gap-5">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold">History</h1>
+          <div className="flex items-center gap-3 text-[15px] font-semibold">
+            <button onClick={() => shift(-1)} className={navBtn} aria-label="Previous month">‹</button>
+            <span className="w-36 text-center">{new Date(month.year, month.month, 1).toLocaleDateString([], { month: 'long', year: 'numeric' })}</span>
+            <button onClick={() => shift(1)} className={navBtn} aria-label="Next month">›</button>
+          </div>
+        </div>
 
-      <Tabs
-        aria-label="History tabs"
-        color="primary"
-        variant="underlined"
-        classNames={{
-          tabList: 'gap-4 w-full border-b border-divider mb-5 overflow-x-auto',
-          cursor: 'bg-primary',
-          tab: 'min-w-max',
-        }}
-      >
-        <Tab key="timeline" title={<span className="flex items-center gap-1.5 text-sm">📋 Timeline</span>}>
-          {months.length === 0 ? (
-            <EmptyState label="No sessions yet. Start playing to record your first session!" />
-          ) : (
-            <div className="space-y-8 pt-2">
-              {months.map(month => {
-                const monthSessions = grouped[month];
-                const totalSeconds = monthSessions.reduce((s, x) => s + x.duration_seconds, 0);
-                const [year, m] = month.split('-');
-                const monthLabel = new Date(parseInt(year), parseInt(m) - 1)
-                  .toLocaleDateString([], { month: 'long', year: 'numeric' });
-                return (
-                  <div key={month}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h2 className="text-sm font-medium text-foreground-400">{monthLabel}</h2>
-                      <span className="text-xs text-foreground-500">
-                        {monthSessions.length} sessions · {formatDurationLong(totalSeconds)}
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      {monthSessions.map(s => <SessionRow key={s.id} session={s} onUpdate={refresh} />)}
-                    </div>
-                  </div>
-                );
-              })}
+        <div className="flex flex-wrap gap-8 px-5 py-4 rounded-2xl bg-[#16161d] border border-white/5">
+          {[
+            { value: formatDurationLong(monthSeconds), label: 'this month' },
+            { value: String(monthSessions.length), label: monthSessions.length === 1 ? 'session' : 'sessions' },
+            { value: `${daysAtGoal} of ${monthDays.length}`, label: 'days at goal', green: true },
+            { value: mostPlayed ?? '—', label: 'most played' },
+          ].map(k => (
+            <div key={k.label} className="min-w-0">
+              <div className={`text-xl font-bold truncate max-w-[14rem] ${k.green ? 'text-green-400' : 'text-foreground'}`}>{k.value}</div>
+              <div className="text-xs text-foreground-500">{k.label}</div>
             </div>
-          )}
-        </Tab>
+          ))}
+        </div>
 
-        <Tab key="songs" title={<span className="flex items-center gap-1.5 text-sm">🎵 By Song</span>}>
-          <div className="pt-2"><BySongTab songs={songs} /></div>
-        </Tab>
+        <div className="grid grid-cols-7 gap-2">
+          {WEEKDAYS.map(w => <div key={w} className="px-2.5 text-[11px] font-semibold uppercase tracking-wider text-foreground-500">{w}</div>)}
+          {monthGrid(month.year, month.month).map(date => {
+            const key = localDay(date);
+            if (date.getMonth() !== month.month) {
+              return <div key={key} className="h-24 p-2.5 text-[13px] text-foreground-600 opacity-40">{date.getDate()}</div>;
+            }
+            const seconds = total(key);
+            const future = key > today;
+            const met = seconds >= goalSeconds;
+            return (
+              <button
+                key={key}
+                disabled={future}
+                onClick={() => setSelected(key)}
+                className={`h-24 p-2.5 rounded-xl border text-left flex flex-col gap-1.5 ${
+                  key === selected ? 'bg-content2 border-primary/60 ring-1 ring-primary/60'
+                    : future ? 'bg-[#16161d]/50 border-white/5' : 'bg-[#16161d] border-white/5 hover:border-white/15'
+                }`}
+              >
+                <span className={`text-[13px] font-semibold ${key === today ? 'text-sky-400' : future ? 'text-foreground-600' : 'text-foreground-300'}`}>{date.getDate()}</span>
+                {seconds > 0 && (
+                  <>
+                    <span className={`mt-auto text-[15px] font-semibold ${met ? 'text-green-400' : 'text-foreground'}`}>{Math.round(seconds / 60)} min</span>
+                    <span className="h-1 rounded-full bg-white/[0.07] overflow-hidden">
+                      <span className={`block h-full rounded-full ${met ? 'bg-green-500' : 'bg-sky-500'}`} style={{ width: `${Math.min(100, (seconds / goalSeconds) * 100)}%` }} />
+                    </span>
+                  </>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-        <Tab key="artists" title={<span className="flex items-center gap-1.5 text-sm">🎤 By Artist</span>}>
-          <div className="pt-2"><ByArtistTab songs={songs} /></div>
-        </Tab>
+        <div className="flex flex-wrap items-center gap-5 text-xs text-foreground-500">
+          <span className="inline-flex items-center gap-1.5"><i className="w-4 h-1 rounded-full bg-green-500" />Goal met ({goals?.config.daily_minutes ?? 30} min)</span>
+          <span className="inline-flex items-center gap-1.5"><i className="w-4 h-1 rounded-full bg-sky-500" />Part of the goal</span>
+          <span className="ml-auto">
+            Best streak {streak.best_streak} day{streak.best_streak === 1 ? '' : 's'}
+            {insights && insights.best_day_seconds > 0 && ` · Best day ${formatDurationLong(insights.best_day_seconds)}`}
+            {achievements.length > 0 && ` · ${unlockedCount} of ${achievements.length} badges`}
+          </span>
+        </div>
+      </section>
 
-        <Tab key="genres" title={<span className="flex items-center gap-1.5 text-sm">🎼 By Genre</span>}>
-          <div className="pt-2"><ByGenreTab songs={songs} /></div>
-        </Tab>
-      </Tabs>
+      <aside className="w-[360px] flex-shrink-0 flex flex-col gap-3.5 pt-1">
+        <div>
+          <div className="text-sm text-foreground-500">
+            {new Date(selected + 'T00:00:00').toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
+          </div>
+          <div className="text-2xl font-bold text-foreground mt-0.5">
+            {daySessions.length === 0
+              ? 'No practice'
+              : `${formatDurationLong(total(selected))} · ${daySessions.length} session${daySessions.length === 1 ? '' : 's'}`}
+          </div>
+        </div>
+        {daySessions.map(s => <SessionCard key={s.id} session={s} recentSongs={recentSongs} onChange={refresh} />)}
+      </aside>
     </div>
   );
 }
-

@@ -52,12 +52,15 @@ pub fn run() {
             commands::practice::get_session_status,
             commands::practice::reconnect_midi,
             commands::practice::get_sessions,
+            commands::practice::get_session,
             commands::practice::get_sessions_for_song,
             commands::practice::update_session_note,
             commands::practice::set_session_feeling,
             commands::practice::link_session_song,
             commands::practice::unlink_session_song,
             commands::practice::tag_session,
+            commands::practice::get_up_next,
+            commands::practice::set_up_next,
             // Updates
             updater::check_for_update,
             updater::install_update,
@@ -71,6 +74,7 @@ pub fn run() {
             commands::songs::get_recent_songs,
             commands::songs::get_song_with_sessions,
             commands::songs::set_song_status,
+            commands::songs::get_mastery_suggestion,
             commands::songs::confirm_mastery_advance,
             // Stats, goals, achievements and settings
             commands::stats::get_daily_totals,

@@ -192,3 +192,30 @@ export function useSongDetail(songId: number | null) {
 
   return { data, loading, refresh };
 }
+
+/** The song the next session will be tagged with. */
+export function useUpNext() {
+  const [song, setSong] = useState<SongRecord | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      setSong(await invoke<SongRecord | null>('get_up_next'));
+    } catch {}
+  }, []);
+
+  const pick = useCallback(async (songId: number | null) => {
+    try {
+      await invoke('set_up_next', { songId });
+      await refresh();
+    } catch {}
+  }, [refresh]);
+
+  useEffect(() => {
+    refresh();
+    let unlisten: (() => void) | undefined;
+    listen('session-ended', () => refresh()).then(fn => { unlisten = fn; });
+    return () => { unlisten?.(); };
+  }, [refresh]);
+
+  return { song, pick };
+}
