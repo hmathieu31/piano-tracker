@@ -4,6 +4,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { Button, Switch, Card, CardBody, Slider, Chip, Input } from '@heroui/react';
 import { useGoalsStatus } from '../hooks/useData';
 import { useUpdaterContext } from '../context/UpdaterContext';
+import { PRERELEASE_SETTING } from '../hooks/useUpdater';
 
 function Section({ title, description, children }: {
   title: string; description?: string; children: React.ReactNode;
@@ -110,6 +111,7 @@ export default function Settings() {
   const [debounceSeconds, setDebounceSeconds] = useState(10);
 
   const [midiSaveFolder, setMidiSaveFolder] = useState('');
+  const [prereleaseUpdates, setPrereleaseUpdates] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -131,6 +133,8 @@ export default function Settings() {
         if (db !== null) setDebounceSeconds(Number(db));
         const msf = await invoke<string | null>('get_setting', { key: 'midi_save_folder' });
         if (msf) setMidiSaveFolder(msf);
+        const pu = await invoke<string | null>('get_setting', { key: PRERELEASE_SETTING });
+        setPrereleaseUpdates(pu === 'true');
       } catch {}
     };
     load();
@@ -152,6 +156,13 @@ export default function Settings() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Saved straight away (not via Save Settings) so the next check uses the new channel
+  const togglePrereleaseUpdates = async (enabled: boolean) => {
+    setPrereleaseUpdates(enabled);
+    await invoke('set_setting', { key: PRERELEASE_SETTING, value: enabled.toString() });
+    await checkForUpdates(false);
   };
 
   const hourLabel = (h: number) => {
@@ -262,6 +273,9 @@ export default function Settings() {
           >
             {updaterState.phase === 'available' ? '↓ Install update' : 'Check for updates'}
           </Button>
+        </Row>
+        <Row label="Prerelease updates" description="Also offer test builds from open pull requests">
+          <Switch isSelected={prereleaseUpdates} onValueChange={togglePrereleaseUpdates} color="warning" size="sm" />
         </Row>
       </Section>
 

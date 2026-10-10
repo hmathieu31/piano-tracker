@@ -2,6 +2,7 @@ mod db;
 mod session;
 mod commands;
 mod notifications;
+mod updater;
 
 use std::sync::Arc;
 use tauri::{
@@ -41,6 +42,7 @@ pub fn run() {
 
             app.manage(db.clone() as DbState);
             app.manage(session.clone());
+            app.manage(updater::PendingUpdate::default());
 
             let force_reconnect: ForceReconnect = Arc::new(std::sync::atomic::AtomicBool::new(false));
             app.manage(force_reconnect.clone());
@@ -130,6 +132,9 @@ pub fn run() {
             commands::get_setting,
             commands::set_setting,
             commands::reconnect_midi,
+            // Updates
+            updater::check_for_update,
+            updater::install_update,
             // Song management
             commands::create_song,
             commands::update_song_genre,
