@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Textarea, Image, Chip } from '@heroui/react';
 import { searchRecordings, type MBSearchResult } from '../api/musicSearch';
-import type { SongRecord, MasterySuggestion } from '../types';
+import type { SongRecord, SongDetail, MasterySuggestion } from '../types';
 import confetti from 'canvas-confetti';
 import { DifficultyDots } from './DifficultyDots';
 
@@ -273,23 +273,23 @@ export default function SessionTagModal({ sessionId, durationSeconds, onClose, d
     debounceRef.current = setTimeout(() => doSearch(v), 600);
   };
 
+  // create_song returns the existing entry when the song is already in the
+  // catalog, so load the stored record (with its sessions and mastery).
+  const loadCatalogSong = async (songId: number): Promise<SongRecord | null> => {
+    const detail = await invoke<SongDetail | null>('get_song_with_sessions', { songId });
+    return detail?.song ?? null;
+  };
+
   const assignFromSearch = async (result: MBSearchResult) => {
     setSaving(true);
     try {
       const songId = await invoke<number>('create_song', {
         title: result.title, artist: result.artist, genre: result.genre,
         album: result.album, year: result.year, coverUrl: result.coverUrl,
-        spotifyUrl: result.spotifyUrl, mbRecordingId: result.recordingId, mbReleaseId: result.releaseId,
-        difficulty: null,
+        itunesTrackId: result.recordingId, difficulty: null,
       });
-      const song: SongRecord = {
-        id: songId, title: result.title, artist: result.artist, genre: result.genre,
-        album: result.album, year: result.year, cover_url: result.coverUrl,
-        spotify_url: result.spotifyUrl, musicbrainz_recording_id: result.recordingId,
-        musicbrainz_release_id: result.releaseId, created_at: Date.now(),
-        session_count: 0,
-      };
-      handlePickSong(song);
+      const song = await loadCatalogSong(songId);
+      if (song) handlePickSong(song);
     } catch { } finally { setSaving(false); }
   };
 
@@ -299,10 +299,10 @@ export default function SessionTagModal({ sessionId, durationSeconds, onClose, d
     try {
       const songId = await invoke<number>('create_song', {
         title: searchQuery.trim(), artist: null, genre: null, album: null,
-        year: null, coverUrl: null, spotifyUrl: null, mbRecordingId: null, mbReleaseId: null,
-        difficulty: null,
+        year: null, coverUrl: null, itunesTrackId: null, difficulty: null,
       });
-      handlePickSong({ id: songId, title: searchQuery.trim(), artist: null, genre: null, album: null, year: null, cover_url: null, spotify_url: null, musicbrainz_recording_id: null, musicbrainz_release_id: null, created_at: Date.now(), session_count: 0 });
+      const song = await loadCatalogSong(songId);
+      if (song) handlePickSong(song);
     } catch { } finally { setSaving(false); }
   };
 

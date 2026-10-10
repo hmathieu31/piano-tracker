@@ -8,7 +8,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { SongRecord } from '../types';
 import { useSongsWithStats, useSongDetail } from '../hooks/useData';
-import { formatDurationLong } from '../utils';
+import { formatDurationLong, spotifySearchUrl } from '../utils';
 import MasteryBadge from '../components/MasteryBadge';
 import MoodTrendChart from '../components/MoodTrendChart';
 import FeelingPicker, { feelingEmoji } from '../components/FeelingPicker';
@@ -224,11 +224,11 @@ function SongDetailModal({
                       songId={song.id}
                       onChanged={handleStatusChange}
                     />
-                    {song.spotify_url && (
+                    {spotifySearchUrl(song) && (
                       <Button
                         size="sm"
                         variant="flat"
-                        onPress={() => openUrl(song.spotify_url!)}
+                        onPress={() => openUrl(spotifySearchUrl(song)!)}
                         className="h-6 px-2.5 text-[11px] bg-[#1DB954]/20 text-[#1DB954] border-[#1DB954]/30 border"
                       >
                         ♪ Open in Spotify

@@ -4,7 +4,7 @@ use tauri::Emitter;
 use std::sync::Arc;
 use crate::db::{Database, SessionRecord, DailyTotal, GoalsConfig, StreakInfo, InsightsData,
                 GoalsStatus, AchievementInfo, SongRecord, SongDetail, MidiEventRecord,
-                MasterySuggestion};
+                MasterySuggestion, NewSong};
 use crate::session::{SharedSession, SessionStatus, get_status};
 
 pub type DbState = Arc<Database>;
@@ -135,23 +135,19 @@ pub fn create_song(
     album: Option<String>,
     year: Option<i32>,
     cover_url: Option<String>,
-    spotify_url: Option<String>,
-    mb_recording_id: Option<String>,
-    mb_release_id: Option<String>,
+    itunes_track_id: Option<String>,
     difficulty: Option<i32>,
 ) -> Result<i64, String> {
-    db.create_song(
-        &title,
-        artist.as_deref(),
-        genre.as_deref(),
-        album.as_deref(),
+    db.create_song(&NewSong {
+        title: &title,
+        artist: artist.as_deref(),
+        genre: genre.as_deref(),
+        album: album.as_deref(),
         year,
-        cover_url.as_deref(),
-        spotify_url.as_deref(),
-        mb_recording_id.as_deref(),
-        mb_release_id.as_deref(),
+        cover_url: cover_url.as_deref(),
+        itunes_track_id: itunes_track_id.as_deref(),
         difficulty,
-    ).map_err(|e| e.to_string())
+    }).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -347,7 +343,7 @@ pub fn dev_simulate_session_ended(
     let date = Local::now().format("%Y-%m-%d").to_string();
 
     let session_id = db
-        .insert_session(&date, start_ms, now_ms, duration_seconds)
+        .insert_session(&date, start_ms, now_ms)
         .map_err(|e| e.to_string())?;
 
     app.emit("session-ended", crate::session::SessionEndedPayload {

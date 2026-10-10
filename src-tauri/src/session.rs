@@ -198,18 +198,16 @@ pub fn start_midi_listener(
 
                     if duration_seconds >= 5 {
                         if let Ok(session_id) = db_debounce.insert_session(
-                            &date, start_ts, end_ts, duration_seconds
+                            &date, start_ts, end_ts
                         ) {
                             // Flush buffered MIDI events for this session
                             if !events_to_save.is_empty() {
                                 let _ = db_debounce.insert_midi_events(session_id, &events_to_save);
                             }
-                            if let Ok(sessions) = db_debounce.get_sessions(1) {
-                                if let Some(session_record) = sessions.first() {
-                                    if let Ok(new_achievements) = db_debounce.check_and_unlock_achievements(session_record) {
-                                        for ach in &new_achievements {
-                                            let _ = app_debounce.emit("achievement-unlocked", ach.clone());
-                                        }
+                            if let Ok(Some(session_record)) = db_debounce.get_session(session_id) {
+                                if let Ok(new_achievements) = db_debounce.check_and_unlock_achievements(&session_record) {
+                                    for ach in &new_achievements {
+                                        let _ = app_debounce.emit("achievement-unlocked", ach.clone());
                                     }
                                 }
                             }

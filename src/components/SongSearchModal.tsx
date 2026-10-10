@@ -54,9 +54,7 @@ export default function SongSearchModal({ sessionId, recentSongs, onAssigned, on
         album: result.album,
         year: result.year,
         coverUrl: result.coverUrl,
-        spotifyUrl: result.spotifyUrl,
-        mbRecordingId: result.recordingId,
-        mbReleaseId: result.releaseId,
+        itunesTrackId: result.recordingId,
         difficulty: null,
       });
       await invoke('link_session_song', { sessionId, songId });
@@ -89,8 +87,7 @@ export default function SongSearchModal({ sessionId, recentSongs, onAssigned, on
       const songId = await invoke<number>('create_song', {
         title: query.trim(),
         artist: null, genre: null, album: null, year: null,
-        coverUrl: null, spotifyUrl: null, mbRecordingId: null, mbReleaseId: null,
-        difficulty: null,
+        coverUrl: null, itunesTrackId: null, difficulty: null,
       });
       await invoke('link_session_song', { sessionId, songId });
       onAssigned();

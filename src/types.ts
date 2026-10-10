@@ -1,23 +1,26 @@
+export type SongStatus = 'wishlist' | 'learning' | 'practicing' | 'mastered';
+
 export interface SongRecord {
   id: number;
   title: string;
+  artist_id: number | null;
   artist: string | null;
-  genre: string | null;
+  album_id: number | null;
   album: string | null;
+  /** First genre, used for grouping; `genres` holds them all. */
+  genre: string | null;
+  genres: string[];
   year: number | null;
+  /** The song's own cover, else its album's. */
   cover_url: string | null;
-  spotify_url: string | null;
-  musicbrainz_recording_id: string | null;
-  musicbrainz_release_id: string | null;
   created_at: number;
-  // populated by get_song_stats
-  total_seconds?: number;
-  session_count?: number;
-  last_played_date?: string | null;
-  // learning journey
-  avg_feeling?: number | null;
-  status?: string | null;
-  difficulty?: number | null;
+  status: SongStatus;
+  difficulty: number | null;
+  // practice totals, computed from the song's sessions
+  total_seconds: number;
+  session_count: number;
+  last_played_date: string | null;
+  avg_feeling: number | null;
 }
 
 export interface SongDetail {
@@ -26,8 +29,6 @@ export interface SongDetail {
 }
 
 export interface MidiEventRecord {
-  id: number;
-  session_id: number;
   relative_ms: number;
   note: number;
   velocity: number;
@@ -42,7 +43,6 @@ export interface SessionRecord {
   duration_seconds: number;
   note: string | null;
   song_id: number | null;
-  song_name: string | null;
   feeling: number | null;
   practice_type: string | null;
   song: SongRecord | null;

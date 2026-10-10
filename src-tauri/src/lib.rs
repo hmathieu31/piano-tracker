@@ -1,4 +1,5 @@
 mod db;
+mod schema;
 mod session;
 mod commands;
 mod notifications;

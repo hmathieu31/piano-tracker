@@ -253,7 +253,7 @@ export default function Home() {
                   <div className="text-xl w-8 text-center flex-shrink-0">{feelingEmoji(s.feeling)}</div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-foreground truncate">
-                      {s.song?.title ?? s.song_name ?? <span className="text-foreground-500 italic">Unnamed session</span>}
+                      {s.song?.title ?? <span className="text-foreground-500 italic">Unnamed session</span>}
                     </div>
                     <div className="text-xs text-foreground-500">{s.date}</div>
                   </div>
