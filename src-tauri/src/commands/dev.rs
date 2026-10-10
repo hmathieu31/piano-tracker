@@ -15,7 +15,8 @@ pub fn clear_dev_data(db: State<DbState>) -> CommandResult<()> {
     Ok(db.clear_dev_data()?)
 }
 
-/// Insert a fake session and emit `session-ended` so the tagging modal appears.
+/// Insert a fake session, tag it with the Up next song like a real one, and
+/// emit `session-ended` so the after-session toast appears.
 #[tauri::command]
 pub fn dev_simulate_session_ended(
     app: tauri::AppHandle,
@@ -24,6 +25,7 @@ pub fn dev_simulate_session_ended(
 ) -> CommandResult<()> {
     let end = now_ms();
     let session_id = db.insert_session(&local_day(end), end - duration_seconds * 1000, end)?;
+    db.apply_up_next(session_id)?;
     app.emit("session-ended", SessionEndedPayload { session_id, duration_seconds })?;
     Ok(())
 }

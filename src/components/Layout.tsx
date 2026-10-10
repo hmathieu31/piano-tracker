@@ -2,16 +2,14 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useSessionStatus } from '../hooks/useData';
 import UpdateBanner from './UpdateBanner';
 import SessionToast from './SessionToast';
-import SessionTagModal from './SessionTagModal';
 import DevToolbar from './DevToolbar';
-import { AnimatePresence } from 'framer-motion';
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { onAction } from '@tauri-apps/plugin-notification';
-import { useState, useEffect, useCallback } from 'react';
-import type { MasterySuggestion } from '../types';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { AchievementInfo } from '../types';
 
 type NavSection = {
   label: string;
@@ -48,18 +46,29 @@ export default function Layout() {
   const [version, setVersion] = useState('');
   const [reconnecting, setReconnecting] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [pendingSession, setPendingSession] = useState<{ id: number; duration: number } | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [devSuggestion, setDevSuggestion] = useState<MasterySuggestion | null>(null);
+  const [pendingSession, setPendingSession] = useState<{ id: number; duration: number; unlocked: AchievementInfo[] } | null>(null);
+  // Achievements unlocked by the session being saved; the backend emits them
+  // just before `session-ended`.
+  const unlockedKeys = useRef<string[]>([]);
   useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
 
-  // session-ended → show the in-app toast (always, even when focused)
+  // session-ended → show the after-session toast, replacing any earlier one
   useEffect(() => {
-    const unlisten = listen<{ session_id: number; duration_seconds: number }>('session-ended', e => {
-      setPendingSession({ id: e.payload.session_id, duration: e.payload.duration_seconds });
-      setShowModal(false); // always show toast first
+    const unlistenUnlock = listen<string>('achievement-unlocked', e => { unlockedKeys.current.push(e.payload); });
+    const unlistenEnd = listen<{ session_id: number; duration_seconds: number }>('session-ended', async e => {
+      const keys = unlockedKeys.current;
+      unlockedKeys.current = [];
+      const all = keys.length > 0 ? await invoke<AchievementInfo[]>('get_achievements').catch(() => []) : [];
+      setPendingSession({
+        id: e.payload.session_id,
+        duration: e.payload.duration_seconds,
+        unlocked: all.filter(a => keys.includes(a.key)),
+      });
     });
-    return () => { unlisten.then(fn => fn()); };
+    return () => {
+      unlistenUnlock.then(fn => fn());
+      unlistenEnd.then(fn => fn());
+    };
   }, []);
 
   useEffect(() => {
@@ -82,38 +91,16 @@ export default function Layout() {
     <div className="flex h-screen bg-[#0f0f13] text-slate-100 overflow-hidden">
       <UpdateBanner />
 
-      {/* Toast — always shown first after a session */}
-      {pendingSession && !showModal && (
+      {pendingSession && (
         <SessionToast
+          key={pendingSession.id}
+          sessionId={pendingSession.id}
           durationSeconds={pendingSession.duration}
-          onTag={() => setShowModal(true)}
-          onDismiss={() => setPendingSession(null)}
+          unlocked={pendingSession.unlocked}
+          onClose={() => setPendingSession(null)}
         />
       )}
-
-      {/* Modal — only opens after user clicks "Tag it" in the toast */}
-      <AnimatePresence>
-        {pendingSession && showModal && (
-          <SessionTagModal
-            key="tag-modal"
-            sessionId={pendingSession.id}
-            durationSeconds={pendingSession.duration}
-            onClose={() => { setPendingSession(null); setShowModal(false); }}
-          />
-        )}
-        {devSuggestion && (
-          <SessionTagModal
-            key="dev-modal"
-            sessionId={-1}
-            durationSeconds={0}
-            devSuggestion={devSuggestion}
-            onClose={() => setDevSuggestion(null)}
-          />
-        )}
-      </AnimatePresence>
-      {import.meta.env.DEV && (
-        <DevToolbar onSimulateSuggest={s => setDevSuggestion(s)} />
-      )}
+      {import.meta.env.DEV && <DevToolbar />}
 
       {/* Sidebar */}
       <aside className={`flex-shrink-0 bg-[#16161d] border-r border-white/5 flex flex-col transition-all duration-200 ${collapsed ? 'w-14' : 'w-52'}`}>

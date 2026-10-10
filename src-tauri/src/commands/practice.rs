@@ -2,7 +2,7 @@
 
 use tauri::State;
 use super::{CommandResult, DbState};
-use crate::db::{MasterySuggestion, SessionRecord};
+use crate::db::{MasterySuggestion, SessionRecord, SongRecord};
 use crate::practice::{ForceReconnect, SessionStatus, SharedSession};
 
 #[tauri::command]
@@ -18,6 +18,11 @@ pub fn reconnect_midi(force_reconnect: State<ForceReconnect>) {
 #[tauri::command]
 pub fn get_sessions(db: State<DbState>, limit: i32) -> CommandResult<Vec<SessionRecord>> {
     Ok(db.get_sessions(limit)?)
+}
+
+#[tauri::command]
+pub fn get_session(db: State<DbState>, id: i64) -> CommandResult<Option<SessionRecord>> {
+    Ok(db.get_session(id)?)
 }
 
 #[tauri::command]
@@ -57,4 +62,15 @@ pub fn tag_session(
     note: Option<String>,
 ) -> CommandResult<Option<MasterySuggestion>> {
     Ok(db.tag_session(session_id, song_id, feeling, practice_type.as_deref(), note.as_deref())?)
+}
+
+/// The song the next session will be tagged with.
+#[tauri::command]
+pub fn get_up_next(db: State<DbState>) -> CommandResult<Option<SongRecord>> {
+    Ok(db.get_up_next()?)
+}
+
+#[tauri::command]
+pub fn set_up_next(db: State<DbState>, song_id: Option<i64>) -> CommandResult<()> {
+    Ok(db.set_up_next(song_id)?)
 }

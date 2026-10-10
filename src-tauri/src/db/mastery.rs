@@ -25,38 +25,33 @@ pub fn status_rank(status: &str) -> Option<i32> {
     }
 }
 
-/// When a song at stage `from` is suggested to move to `to`: among its last
-/// `window` tagged sessions, at least `min_strong` have a practice type in
-/// `strong`, and the average feeling is at least `min_avg_feeling`.
+/// When a song at stage `from` is suggested to move to `to`: it has at
+/// least `window` sessions, and among the last `window` at least
+/// `min_rated` have a mood whose average is at least `min_avg_feeling`.
 struct AdvanceRule {
     from: &'static str,
     to: &'static str,
     window: usize,
-    strong: &'static [&'static str],
-    min_strong: usize,
-    min_avg_feeling: Option<f64>,
+    min_rated: usize,
+    min_avg_feeling: f64,
 }
 
 const RULES: &[AdvanceRule] = &[
-    AdvanceRule {
-        from: "learning", to: "practicing",
-        window: 3, strong: &["full", "performance"], min_strong: 2, min_avg_feeling: None,
-    },
-    AdvanceRule {
-        from: "practicing", to: "mastered",
-        window: 7, strong: &["performance"], min_strong: 5, min_avg_feeling: Some(4.0),
-    },
+    AdvanceRule { from: "learning", to: "practicing", window: 5, min_rated: 0, min_avg_feeling: 0.0 },
+    AdvanceRule { from: "practicing", to: "mastered", window: 7, min_rated: 5, min_avg_feeling: 4.0 },
 ];
 
 impl AdvanceRule {
-    fn is_met(&self, recent: &[(String, Option<i64>)]) -> bool {
+    /// `recent` holds the moods of the song's latest sessions, newest first.
+    fn is_met(&self, recent: &[Option<i64>]) -> bool {
         if recent.len() < self.window {
             return false;
         }
-        let strong = recent.iter().filter(|(t, _)| self.strong.contains(&t.as_str())).count();
-        let rated: Vec<i64> = recent.iter().filter_map(|(_, f)| *f).collect();
-        let avg = if rated.is_empty() { 0.0 } else { rated.iter().sum::<i64>() as f64 / rated.len() as f64 };
-        strong >= self.min_strong && self.min_avg_feeling.is_none_or(|min| avg >= min)
+        let rated: Vec<i64> = recent.iter().take(self.window).filter_map(|f| *f).collect();
+        if rated.len() < self.min_rated {
+            return false;
+        }
+        rated.is_empty() || rated.iter().sum::<i64>() as f64 / rated.len() as f64 >= self.min_avg_feeling
     }
 }
 
@@ -68,13 +63,11 @@ pub(super) fn suggestion(conn: &Connection, song_id: i64) -> Result<Option<Maste
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
     let Some(rule) = RULES.iter().find(|r| r.from == current) else { return Ok(None) };
-    let recent: Vec<(String, Option<i64>)> = query_all(
+    let recent: Vec<Option<i64>> = query_all(
         conn,
-        "SELECT practice_type, feeling FROM sessions
-         WHERE song_id = ?1 AND practice_type IS NOT NULL
-         ORDER BY started_at DESC LIMIT ?2",
+        "SELECT feeling FROM sessions WHERE song_id = ?1 ORDER BY started_at DESC LIMIT ?2",
         params![song_id, rule.window as i64],
-        |r| Ok((r.get(0)?, r.get(1)?)),
+        |r| r.get(0),
     )?;
     Ok(rule.is_met(&recent).then(|| MasterySuggestion {
         song_id,
@@ -106,6 +99,11 @@ pub(super) fn change_status(conn: &Connection, song_id: i64, status: &str, sessi
 }
 
 impl Database {
+    /// The next stage this song is ready for, if any.
+    pub fn mastery_suggestion(&self, song_id: i64) -> Result<Option<MasterySuggestion>> {
+        suggestion(&self.conn(), song_id)
+    }
+
     pub fn set_song_status(&self, song_id: i64, status: &str) -> Result<()> {
         self.transaction(|tx| change_status(tx, song_id, status, None))
     }
@@ -131,16 +129,13 @@ mod tests {
 
     #[test]
     fn rules_follow_recent_sessions() {
-        let recent = |items: &[(&str, Option<i64>)]| -> Vec<(String, Option<i64>)> {
-            items.iter().map(|(t, f)| (t.to_string(), *f)).collect()
-        };
         let [learning, practicing] = [&RULES[0], &RULES[1]];
-        assert!(learning.is_met(&recent(&[("full", None), ("section", None), ("performance", None)])));
-        assert!(!learning.is_met(&recent(&[("full", None), ("section", None), ("first", None)])));
-        assert!(!learning.is_met(&recent(&[("full", None), ("full", None)])));
-        let perf = |f| ("performance", Some(f));
-        assert!(practicing.is_met(&recent(&[perf(4), perf(4), perf(4), perf(4), perf(4), ("full", None), ("full", None)])));
-        assert!(!practicing.is_met(&recent(&[perf(3), perf(3), perf(4), perf(4), perf(4), ("full", None), ("full", None)])));
+        assert!(learning.is_met(&[None; 5]));
+        assert!(!learning.is_met(&[Some(5); 4]));
+        assert!(practicing.is_met(&[Some(4), Some(5), Some(4), Some(4), Some(4), None, None]));
+        // Too few rated sessions, or a mood below Good on average.
+        assert!(!practicing.is_met(&[Some(5), Some(5), Some(5), Some(5), None, None, None]));
+        assert!(!practicing.is_met(&[Some(3), Some(3), Some(4), Some(4), Some(4), None, None]));
     }
 
     #[test]
@@ -151,12 +146,13 @@ mod tests {
             year: None, cover_url: None, itunes_track_id: None, difficulty: None,
         }).unwrap();
         let mut suggestion = None;
-        for (i, kind) in ["full", "section", "performance"].iter().enumerate() {
-            let start = i as i64 * 100_000;
+        for i in 0..5 {
+            let start = i * 100_000;
             let s = db.insert_session("2026-10-01", start, start + 60_000).unwrap();
-            suggestion = db.tag_session(s, Some(song_id), Some(4), Some(kind), None).unwrap();
+            suggestion = db.tag_session(s, Some(song_id), Some(4), None, None).unwrap();
+            if i < 4 { assert!(suggestion.is_none()); }
         }
-        let suggestion = suggestion.expect("three sessions with two strong runs suggest advancing");
+        let suggestion = suggestion.expect("five sessions while learning suggest advancing");
         assert_eq!(suggestion.suggested_status, "practicing");
         db.confirm_mastery_advance(song_id, &suggestion.suggested_status).unwrap();
 
@@ -168,7 +164,7 @@ mod tests {
         ).unwrap();
         assert_eq!(history, vec![
             (None, "learning".into(), None),
-            (Some("learning".into()), "practicing".into(), Some(3)),
+            (Some("learning".into()), "practicing".into(), Some(5)),
         ]);
     }
 }

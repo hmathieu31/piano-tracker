@@ -10,6 +10,7 @@
 //! - `stats`: daily totals, streaks, insights and goals
 //! - `achievements`: achievement definitions and unlocking
 //! - `settings`: the key-value settings store
+//! - `up_next`: the song picked to tag the next session
 //! - `dev`: demo data for development
 //!
 //! The schema and its migrations live in `migrations`.
@@ -23,6 +24,7 @@ mod migrations;
 mod sessions;
 mod settings;
 mod stats;
+mod up_next;
 
 use std::sync::{Mutex, MutexGuard};
 use rusqlite::{Connection, Params, Row, Transaction};
