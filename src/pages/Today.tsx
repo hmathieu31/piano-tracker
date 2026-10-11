@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { Image } from '@heroui/react';
 import { useSessionStatus, useStreak, useGoalsStatus, useSessions, useSongsWithStats } from '../hooks/useData';
 import { formatDuration, formatDurationLong, formatTime, todayStr } from '../utils';
 import FeelingPicker, { feelingEmoji } from '../components/FeelingPicker';
@@ -67,8 +68,13 @@ function SessionCard({ session, recentSongs, onChange }: { session: SessionRecor
 
   return (
     <div className={`p-4 rounded-2xl bg-content2 border ${tagged ? 'border-divider' : 'border-warning/35'}`}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg overflow-hidden bg-content3 flex-shrink-0 flex items-center justify-center">
+          {session.song?.cover_url
+            ? <Image src={session.song.cover_url} alt="" className="w-10 h-10 object-cover" removeWrapper />
+            : <span className="text-lg">{tagged ? '🎵' : '🎹'}</span>}
+        </div>
+        <div className="flex-1 min-w-0">
           <div className={`text-sm font-medium truncate ${tagged ? 'text-foreground' : 'text-warning'}`}>
             {session.song?.title ?? 'Warm-up or untagged'}
           </div>
